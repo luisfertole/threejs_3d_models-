@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>three.js - misc - octree collisions</title>
+		<meta charset=utf-8 />
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<link type="text/css" rel="stylesheet" href="../css/main.css">
+	</head>
+	<body>
+		<div id="info">
+			Octree threejs demo - basic collisions with static triangle mesh<br />
+			MOUSE to look around and to throw balls<br/>
+			WASD to move and SPACE to jump
+		</div>
+		<div id="container"></div>
+
+		<script type="importmap">
+			{
+				"imports": {
+					"three": "../build/three.module.js",
+					"three/addons/": "../jsm/"
+				}
+			}
+		</script>
+
+		<script type="module" src="./js/main.js"></script>
+
+	</body>
+</html>

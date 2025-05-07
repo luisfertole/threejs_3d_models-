@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>RESCATE - Juego 3D</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+        body { 
+            margin: 0;
+            overflow: hidden;
+            touch-action: none;
+        }
+        #container {
+            width: 100%;
+            height: 100vh;
+            display: block;
+            cursor: pointer;
+        }
+        #info {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            font-size: 14px;
+        }
+        #title {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #FFD700;
+            background-color: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 100;
+            font-family: sans-serif;
+        }
+        #lockButton {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 101;
+        }
+        #pointer-lock-help {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 80%;
+            text-align: center;
+            z-index: 102;
+            display: none;
+        }
+        footer {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: white;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 100;
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="title">RESCATE</div>
+
+    <div id="info">
+        SALVA AL NIÑO Y LLEVALO A UN PUNTO SEGURO.<br>
+        CONTROLES: WASD PARA MOVERSE, ESPACIO PARA SALTAR.<br>
+        PULSA ESC PARA LIBERAR EL PUNTERO Y DOS VECES ESC PARA PAUSAR.
+    </div>
+    
+    <div id="container"></div>
+    
+    <button id="lockButton">INICIAR JUEGO</button>
+    
+    <div id="pointer-lock-help">
+        <h3>Se requiere activar controles</h3>
+        <p>Para una mejor experiencia, por favor:</p>
+        <ol>
+            <li>Haz clic en el área del juego</li>
+            <li>Acepta el bloqueo del puntero cuando se te solicite</li>
+        </ol>
+        <button id="retry-lock-button">Intentar de nuevo</button>
+    </div>
+
+    <footer>
+        © 2025 RESCATE. Todos los derechos reservados. Desarrollado por Luis Fernando Tolentino Segovia.
+    </footer>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "../build/three.module.js",
+                "three/addons/": "../jsm/"
+            }
+        }
+    </script>
+    <audio id="background-music" loop>
+        <source src="./music/music.mp3" type="audio/mpeg">
+    </audio>
+    
+    <script src="./js/collectibles.js"></script>
+    <script type="module" src="./js/main.js"></script>
+</body>
+</html>

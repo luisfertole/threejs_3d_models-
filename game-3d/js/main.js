@@ -721,7 +721,7 @@ class Kid {
         this.damageCooldown = 1000;
 
         // Configuración del modelo 3D
-        this.model.scale.set(0.0095, 0.0095, 0.0095);
+        this.model.scale.set(0.0075, 0.0075, 0.0075);
         this.model.traverse(child => {
             if (child.isMesh) {
                 child.castShadow = true;

@@ -1,10 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'; // Importa FBXLoader
-import { AnimationMixer } from 'three'; // Importa AnimationMixer (común en versiones recientes de Three.js)
-// Si la línea anterior da error, prueba esta:
-// import { AnimationMixer } from 'three/addons/animation/AnimationMixer.js'; 
-
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+import { AnimationMixer } from 'three'; 
 
 class PenaltyVRGame {
     constructor() {
@@ -23,14 +20,14 @@ class PenaltyVRGame {
         
         // Game objects
         this.ball = null;
-        this.goal = null;
         this.stadium = null; 
-        this.shooter = null; // Ahora será el modelo FBX
+        this.shooter = null; 
         this.hands = { left: null, right: null };
+        this.goalDetector = null; // Propiedad para el prisma detector de gol
         
         // Propiedades para la animación del oponente
         this.shooterMixer = null;
-        this.kickAction = null; // Para la acción de patear
+        this.kickAction = null; 
         
         // Physics
         this.ballVelocity = new THREE.Vector3();
@@ -50,18 +47,18 @@ class PenaltyVRGame {
         this.setupVR();
         this.setupLighting();
         
-        // Carga el estadio (modelo GLB)
-        // ¡IMPORTANTE! Reemplaza 'path/to/your/stadium.glb' con la ruta real
-        this.loadStadium('./map/map.glb'); // Ejemplo de ruta
+        // Carga el estadio (modelo GLB que incluye la portería)
+        // ¡IMPORTANTE! Reemplaza con la ruta real a tu archivo GLB
+        this.loadStadium('./map/map.glb'); 
         
-        this.createGoal();
         this.createBall();
         
         // Carga el oponente (modelo FBX con animación)
-        // ¡IMPORTANTE! Reemplaza 'path/to/your/opponent.fbx' con la ruta real
-        this.loadOpponent('./npc/jugador.fbx'); // Ejemplo de ruta
+        // ¡IMPORTANTE! Reemplaza con la ruta real a tu archivo FBX
+        this.loadOpponent('./npc/jugador.fbx'); 
         
         this.createHands();
+        this.createGoalDetector(); // Crea el prisma detector de gol
         this.setupEventListeners();
         this.startGameLoop();
         
@@ -228,7 +225,6 @@ class PenaltyVRGame {
                 this.shooterMixer = new THREE.AnimationMixer(this.shooter);
                 
                 // Si el FBX tiene múltiples animaciones, puedes iterar sobre ellas.
-                // Para Mixamo, si descargas una animación específica, generalmente hay solo una.
                 if (this.shooter.animations && this.shooter.animations.length > 0) {
                     // Asume que la primera animación es la de patear
                     this.kickAction = this.shooterMixer.clipAction(this.shooter.animations[0]);
@@ -249,45 +245,32 @@ class PenaltyVRGame {
         );
     }
     
-    createGoal() {
-        const goalGroup = new THREE.Group();
-        
-        // Postes de la portería
-        const postGeometry = new THREE.CylinderGeometry(0.1, 0.1, 2.44);
-        const postMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
-        
-        const leftPost = new THREE.Mesh(postGeometry, postMaterial);
-        leftPost.position.set(-3.66, 1.22, -12);
-        leftPost.castShadow = true;
-        goalGroup.add(leftPost);
-        
-        const rightPost = new THREE.Mesh(postGeometry, postMaterial);
-        rightPost.position.set(3.66, 1.22, -12);
-        rightPost.castShadow = true;
-        goalGroup.add(rightPost);
-        
-        // Travesaño
-        const crossbarGeometry = new THREE.CylinderGeometry(0.1, 0.1, 7.32);
-        const crossbar = new THREE.Mesh(crossbarGeometry, postMaterial);
-        crossbar.rotation.z = Math.PI / 2;
-        crossbar.position.set(0, 2.44, -12);
-        crossbar.castShadow = true;
-        goalGroup.add(crossbar);
-        
-        // Red de la portería (visual)
-        const netGeometry = new THREE.PlaneGeometry(7.32, 2.44);
-        const netMaterial = new THREE.MeshBasicMaterial({ 
-            color: 0xffffff, 
-            transparent: true, 
-            opacity: 0.3,
-            wireframe: true
+    /**
+     * Crea un prisma rectangular delgado de color verde para detectar goles.
+     * Ajusta su posición, rotación y escala para que coincida con la portería de tu GLB.
+     */
+    createGoalDetector() {
+        // Dimensiones iniciales (puedes ajustarlas para que coincidan con tu portería)
+        const detectorGeometry = new THREE.BoxGeometry(7.32, 2.44, 0.1); // Ancho, Alto, Profundidad delgada
+        const detectorMaterial = new THREE.MeshBasicMaterial({
+            color: 0x00ff00, // Color verde brillante
+            transparent: true,
+            opacity: 0.5, // Semi-transparente
+            side: THREE.DoubleSide // Visible desde ambos lados
         });
-        const net = new THREE.Mesh(netGeometry, netMaterial);
-        net.position.set(0, 1.22, -12.1);
-        goalGroup.add(net);
-        
-        this.goal = goalGroup;
-        this.scene.add(this.goal);
+
+        this.goalDetector = new THREE.Mesh(detectorGeometry, detectorMaterial);
+
+        // ¡IMPORTANTE! Ajusta esta posición (X, Y, Z) para que el prisma encaje en la portería de tu modelo.
+        // El valor Z es clave para que esté en la línea de gol correcta.
+        // X e Y ajustarán el centrado y la altura.
+        this.goalDetector.position.set(0, 1.22, -12); 
+
+        this.scene.add(this.goalDetector);
+        console.log("Detector de gol creado. Ajusta su posición y escala si es necesario.");
+
+        // Una vez que hayas ajustado visualmente su posición, puedes hacerlo invisible
+        // this.goalDetector.visible = false; 
     }
     
     createBall() {
@@ -299,8 +282,6 @@ class PenaltyVRGame {
         this.resetBallPosition();
         this.scene.add(this.ball);
     }
-    
-    // createShooter() ha sido reemplazado por loadOpponent()
     
     createHands() {
         // Manos virtuales para detección de colisiones
@@ -346,10 +327,9 @@ class PenaltyVRGame {
         this.kickAction.play();
 
         // Los valores de dirección y potencia deben ajustarse a la animación
-        // Puedes necesitar un ligero retraso si la animación no patea exactamente al inicio.
-        const targetX = (Math.random() - 0.5) * 6; // Posición horizontal aleatoria en la portería
-        const targetY = Math.random() * 2 + 0.2; // Altura aleatoria
-        const power = 12 + Math.random() * 8; // Potencia aleatoria
+        const targetX = (Math.random() - 0.5) * 6; 
+        const targetY = Math.random() * 2 + 0.2; 
+        const power = 12 + Math.random() * 8; 
         
         const direction = new THREE.Vector3(targetX, targetY, -12).sub(this.ball.position).normalize();
         this.ballVelocity = direction.multiplyScalar(power);
@@ -377,17 +357,34 @@ class PenaltyVRGame {
             this.ballVelocity.z *= 0.8; // Fricción
         }
         
-        // Comprueba la colisión con la portería
-        if (this.ball.position.z <= -12) {
-            if (Math.abs(this.ball.position.x) <= 3.66 && this.ball.position.y <= 2.44) {
+        // Comprueba la colisión con el detector de gol (el nuevo prisma)
+        const ballBoundingBox = new THREE.Box3().setFromObject(this.ball);
+        const detectorBoundingBox = new THREE.Box3().setFromObject(this.goalDetector);
+
+        if (ballBoundingBox.intersectsBox(detectorBoundingBox)) {
+            // Asegúrate de que la pelota esté "detrás" de la línea de gol (dentro de la portería)
+            if (this.ball.position.z < this.goalDetector.position.z) { 
                 // Gol marcado por el tirador
                 this.shooterScore++;
                 this.updateScore();
                 this.ballInPlay = false;
                 setTimeout(() => this.nextRound(), 2000);
             } else {
-                // La pelota golpeó un poste o el travesaño
-                this.ballVelocity.z = Math.abs(this.ballVelocity.z) * 0.8;
+                // La pelota golpeó la portería (el área del detector, pero no la cruzó completamente)
+                // Esto simula un rebote contra los postes o el travesaño del detector virtual
+                this.ballVelocity.z = Math.abs(this.ballVelocity.z) * 0.8; // Rebote en Z
+
+                // Rebotes laterales/verticales si golpea los bordes del detector
+                const halfWidth = this.goalDetector.geometry.parameters.width / 2;
+                const halfHeight = this.goalDetector.geometry.parameters.height / 2;
+                const ballRadius = this.ball.geometry.parameters.radius;
+
+                if (Math.abs(this.ball.position.x - this.goalDetector.position.x) > halfWidth - ballRadius) {
+                    this.ballVelocity.x *= -0.8; 
+                }
+                if (Math.abs(this.ball.position.y - this.goalDetector.position.y) > halfHeight - ballRadius) {
+                    this.ballVelocity.y *= -0.8; 
+                }
             }
         }
         

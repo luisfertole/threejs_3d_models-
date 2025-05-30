@@ -1,5 +1,10 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'; // Importa GLTFLoader
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'; // Importa FBXLoader
+import { AnimationMixer } from 'three'; // Importa AnimationMixer (común en versiones recientes de Three.js)
+// Si la línea anterior da error, prueba esta:
+// import { AnimationMixer } from 'three/addons/animation/AnimationMixer.js'; 
+
 
 class PenaltyVRGame {
     constructor() {
@@ -19,9 +24,13 @@ class PenaltyVRGame {
         // Game objects
         this.ball = null;
         this.goal = null;
-        this.stadium = null; // Esta propiedad ahora contendrá tu modelo GLB
-        this.shooter = null;
+        this.stadium = null; 
+        this.shooter = null; // Ahora será el modelo FBX
         this.hands = { left: null, right: null };
+        
+        // Propiedades para la animación del oponente
+        this.shooterMixer = null;
+        this.kickAction = null; // Para la acción de patear
         
         // Physics
         this.ballVelocity = new THREE.Vector3();
@@ -40,12 +49,18 @@ class PenaltyVRGame {
         this.setupRenderer();
         this.setupVR();
         this.setupLighting();
-        // Llama a la nueva función para cargar el modelo GLB
-        // ¡IMPORTANTE! Reemplaza 'path/to/your/stadium.glb' con la ruta real de tu archivo
-        this.loadStadium('./map/map.glb'); 
+        
+        // Carga el estadio (modelo GLB)
+        // ¡IMPORTANTE! Reemplaza 'path/to/your/stadium.glb' con la ruta real
+        this.loadStadium('./map/map.glb'); // Ejemplo de ruta
+        
         this.createGoal();
         this.createBall();
-        this.createShooter();
+        
+        // Carga el oponente (modelo FBX con animación)
+        // ¡IMPORTANTE! Reemplaza 'path/to/your/opponent.fbx' con la ruta real
+        this.loadOpponent('./npc/jugador.fbx'); // Ejemplo de ruta
+        
         this.createHands();
         this.setupEventListeners();
         this.startGameLoop();
@@ -158,11 +173,9 @@ class PenaltyVRGame {
             (gltf) => {
                 this.stadium = gltf.scene;
                 // Ajusta la escala, posición y rotación de tu modelo aquí.
-                // Es muy probable que necesites modificar estos valores para que tu modelo
-                // se ajuste correctamente a la escena y al tamaño de los otros objetos.
-                this.stadium.scale.set(10, 10, 10); // Ejemplo: Ajusta la escala del modelo
-                this.stadium.position.set(0, 0, 0); // Ejemplo: Ajusta la posición (X, Y, Z)
-                this.stadium.rotation.y = Math.PI; // Ejemplo: Rota el modelo 180 grados en el eje Y
+                this.stadium.scale.set(10, 10, 10); 
+                this.stadium.position.set(0, 0, 0); 
+                this.stadium.rotation.y = Math.PI; 
                 
                 // Habilita las sombras para todas las mallas en el modelo del estadio
                 this.stadium.traverse((child) => {
@@ -176,17 +189,65 @@ class PenaltyVRGame {
                 console.log('¡Estadio cargado exitosamente!');
             },
             (xhr) => {
-                // Opcional: Callback de progreso para mostrar el estado de carga
-                console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+                console.log((xhr.loaded / xhr.total * 100) + '% cargado del estadio');
             },
             (error) => {
-                // Callback de error si algo sale mal durante la carga
                 console.error('Ocurrió un error al cargar el modelo del estadio:', error);
             }
         );
     }
 
-    // El método createStadium() original ha sido eliminado, ya que loadStadium() lo reemplaza.
+    /**
+     * Carga el modelo 3D del oponente (jugador) con animación de un archivo FBX.
+     * @param {string} modelPath La ruta al archivo .fbx del oponente.
+     */
+    loadOpponent(modelPath) {
+        const loader = new FBXLoader();
+        loader.load(
+            modelPath,
+            (fbx) => {
+                this.shooter = fbx;
+                
+                // Ajusta la escala, posición y rotación de tu modelo FBX aquí.
+                // Los modelos de Mixamo suelen ser grandes, así que probablemente necesites escalarlos.
+                this.shooter.scale.set(0.01, 0.01, 0.01); // Escala común para modelos de Mixamo
+                this.shooter.position.set(0, 0, 8); // Posiciona en el punto de penalti
+                this.shooter.rotation.y = Math.PI; // Rota para que mire hacia la portería
+                
+                // Habilita las sombras para todas las mallas dentro del modelo
+                this.shooter.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+
+                this.scene.add(this.shooter);
+
+                // Configura el AnimationMixer
+                this.shooterMixer = new THREE.AnimationMixer(this.shooter);
+                
+                // Si el FBX tiene múltiples animaciones, puedes iterar sobre ellas.
+                // Para Mixamo, si descargas una animación específica, generalmente hay solo una.
+                if (this.shooter.animations && this.shooter.animations.length > 0) {
+                    // Asume que la primera animación es la de patear
+                    this.kickAction = this.shooterMixer.clipAction(this.shooter.animations[0]);
+                    this.kickAction.loop = THREE.LoopOnce; // La animación solo se reproduce una vez
+                    this.kickAction.clampWhenFinished = true; // Se detiene en el último fotograma
+                } else {
+                    console.warn('El modelo FBX del oponente no contiene animaciones.');
+                }
+                
+                console.log('¡Oponente cargado exitosamente con animación!');
+            },
+            (xhr) => {
+                console.log((xhr.loaded / xhr.total * 100) + '% cargado del oponente');
+            },
+            (error) => {
+                console.error('Ocurrió un error al cargar el modelo del oponente:', error);
+            }
+        );
+    }
     
     createGoal() {
         const goalGroup = new THREE.Group();
@@ -233,63 +294,13 @@ class PenaltyVRGame {
         const ballGeometry = new THREE.SphereGeometry(0.11, 32, 32);
         const ballMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
         
-        // Como no podemos cargar texturas externas directamente en este ejemplo,
-        // usaremos una pelota blanca simple.
-        
         this.ball = new THREE.Mesh(ballGeometry, ballMaterial);
         this.ball.castShadow = true;
         this.resetBallPosition();
         this.scene.add(this.ball);
     }
     
-    createShooter() {
-        const shooterGroup = new THREE.Group();
-        
-        // Tirador humanoide simple
-        // Cuerpo
-        const bodyGeometry = new THREE.CylinderGeometry(0.3, 0.4, 1.2);
-        const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x0066cc });
-        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-        body.position.y = 1.2;
-        shooterGroup.add(body);
-        
-        // Cabeza
-        const headGeometry = new THREE.SphereGeometry(0.2);
-        const headMaterial = new THREE.MeshLambertMaterial({ color: 0xffdbac });
-        const head = new THREE.Mesh(headGeometry, headMaterial);
-        head.position.y = 2;
-        shooterGroup.add(head);
-        
-        // Brazos
-        const armGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.8);
-        const armMaterial = new THREE.MeshLambertMaterial({ color: 0xffdbac });
-        
-        const leftArm = new THREE.Mesh(armGeometry, armMaterial);
-        leftArm.position.set(-0.5, 1.2, 0);
-        leftArm.rotation.z = Math.PI / 6;
-        shooterGroup.add(leftArm);
-        
-        const rightArm = new THREE.Mesh(armGeometry, armMaterial);
-        rightArm.position.set(0.5, 1.2, 0);
-        rightArm.rotation.z = -Math.PI / 6;
-        shooterGroup.add(rightArm);
-        
-        // Piernas
-        const legGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1);
-        const legMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
-        
-        const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
-        leftLeg.position.set(-0.2, 0.5, 0);
-        shooterGroup.add(leftLeg);
-        
-        const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
-        rightLeg.position.set(0.2, 0.5, 0);
-        shooterGroup.add(rightLeg);
-        
-        shooterGroup.position.set(0, 0, 8);
-        this.shooter = shooterGroup;
-        this.scene.add(this.shooter);
-    }
+    // createShooter() ha sido reemplazado por loadOpponent()
     
     createHands() {
         // Manos virtuales para detección de colisiones
@@ -325,11 +336,17 @@ class PenaltyVRGame {
     }
     
     shootBall() {
-        if (!this.gameActive) return;
+        // Asegúrate de que el juego esté activo y que la acción de patear exista
+        if (!this.gameActive || !this.kickAction) return; 
         
         this.ballInPlay = true;
         
-        // Dirección y potencia aleatorias del disparo
+        // Reinicia y reproduce la animación de patear
+        this.kickAction.reset();
+        this.kickAction.play();
+
+        // Los valores de dirección y potencia deben ajustarse a la animación
+        // Puedes necesitar un ligero retraso si la animación no patea exactamente al inicio.
         const targetX = (Math.random() - 0.5) * 6; // Posición horizontal aleatoria en la portería
         const targetY = Math.random() * 2 + 0.2; // Altura aleatoria
         const power = 12 + Math.random() * 8; // Potencia aleatoria
@@ -543,6 +560,11 @@ class PenaltyVRGame {
     animate() {
         const deltaTime = this.clock.getDelta();
         
+        // Actualiza el mixer de animación del oponente
+        if (this.shooterMixer) {
+            this.shooterMixer.update(deltaTime);
+        }
+
         this.updateBall(deltaTime);
         this.updateControllerPositions();
         

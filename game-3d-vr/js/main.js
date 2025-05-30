@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'; // Importa GLTFLoader
 
 class PenaltyVRGame {
     constructor() {
@@ -18,7 +19,7 @@ class PenaltyVRGame {
         // Game objects
         this.ball = null;
         this.goal = null;
-        this.stadium = null;
+        this.stadium = null; // Esta propiedad ahora contendrá tu modelo GLB
         this.shooter = null;
         this.hands = { left: null, right: null };
         
@@ -39,7 +40,9 @@ class PenaltyVRGame {
         this.setupRenderer();
         this.setupVR();
         this.setupLighting();
-        this.createStadium();
+        // Llama a la nueva función para cargar el modelo GLB
+        // ¡IMPORTANTE! Reemplaza 'path/to/your/stadium.glb' con la ruta real de tu archivo
+        this.loadStadium('./map/map.glb'); 
         this.createGoal();
         this.createBall();
         this.createShooter();
@@ -47,13 +50,13 @@ class PenaltyVRGame {
         this.setupEventListeners();
         this.startGameLoop();
         
-        // Start first penalty after a delay
+        // Inicia el primer penalti después de un retraso
         setTimeout(() => this.startPenalty(), 2000);
     }
     
     setupScene() {
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x87CEEB); // Sky blue
+        this.scene.background = new THREE.Color(0x87CEEB); // Azul cielo
         this.scene.fog = new THREE.Fog(0x87CEEB, 50, 200);
     }
     
@@ -64,7 +67,7 @@ class PenaltyVRGame {
             0.1,
             1000
         );
-        this.camera.position.set(0, 1.6, 0); // Average human eye height
+        this.camera.position.set(0, 1.6, 0); // Altura promedio del ojo humano
         this.scene.add(this.camera);
     }
     
@@ -81,7 +84,7 @@ class PenaltyVRGame {
     }
     
     setupVR() {
-        // Create VR button
+        // Crea el botón de VR
         const vrButton = document.createElement('button');
         vrButton.style.position = 'absolute';
         vrButton.style.bottom = '20px';
@@ -110,7 +113,7 @@ class PenaltyVRGame {
         
         document.body.appendChild(vrButton);
         
-        // Setup hand controllers
+        // Configura los controladores de mano
         for (let i = 0; i < 2; i++) {
             const controller = this.renderer.xr.getController(i);
             controller.addEventListener('selectstart', () => this.onControllerSelect(i));
@@ -125,11 +128,11 @@ class PenaltyVRGame {
     }
     
     setupLighting() {
-        // Ambient light
+        // Luz ambiental
         const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
         this.scene.add(ambientLight);
         
-        // Directional light (sun)
+        // Luz direccional (sol)
         const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
         directionalLight.position.set(50, 100, 50);
         directionalLight.castShadow = true;
@@ -144,40 +147,51 @@ class PenaltyVRGame {
         this.scene.add(directionalLight);
     }
     
-    createStadium() {
-        // Ground
-        const groundGeometry = new THREE.PlaneGeometry(100, 100);
-        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x00AA00 });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        this.scene.add(ground);
-        
-        // Stadium walls
-        const wallHeight = 10;
-        const wallGeometry = new THREE.BoxGeometry(100, wallHeight, 1);
-        const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 });
-        
-        // Back wall
-        const backWall = new THREE.Mesh(wallGeometry, wallMaterial);
-        backWall.position.set(0, wallHeight/2, -50);
-        this.scene.add(backWall);
-        
-        // Side walls
-        const sideWallGeometry = new THREE.BoxGeometry(1, wallHeight, 100);
-        const leftWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
-        leftWall.position.set(-50, wallHeight/2, 0);
-        this.scene.add(leftWall);
-        
-        const rightWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
-        rightWall.position.set(50, wallHeight/2, 0);
-        this.scene.add(rightWall);
+    /**
+     * Carga el modelo 3D del estadio desde un archivo GLB.
+     * @param {string} modelPath La ruta al archivo .glb del estadio.
+     */
+    loadStadium(modelPath) {
+        const loader = new GLTFLoader();
+        loader.load(
+            modelPath,
+            (gltf) => {
+                this.stadium = gltf.scene;
+                // Ajusta la escala, posición y rotación de tu modelo aquí.
+                // Es muy probable que necesites modificar estos valores para que tu modelo
+                // se ajuste correctamente a la escena y al tamaño de los otros objetos.
+                this.stadium.scale.set(10, 10, 10); // Ejemplo: Ajusta la escala del modelo
+                this.stadium.position.set(0, 0, 0); // Ejemplo: Ajusta la posición (X, Y, Z)
+                this.stadium.rotation.y = Math.PI; // Ejemplo: Rota el modelo 180 grados en el eje Y
+                
+                // Habilita las sombras para todas las mallas en el modelo del estadio
+                this.stadium.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+                
+                this.scene.add(this.stadium);
+                console.log('¡Estadio cargado exitosamente!');
+            },
+            (xhr) => {
+                // Opcional: Callback de progreso para mostrar el estado de carga
+                console.log((xhr.loaded / xhr.total * 100) + '% cargado');
+            },
+            (error) => {
+                // Callback de error si algo sale mal durante la carga
+                console.error('Ocurrió un error al cargar el modelo del estadio:', error);
+            }
+        );
     }
+
+    // El método createStadium() original ha sido eliminado, ya que loadStadium() lo reemplaza.
     
     createGoal() {
         const goalGroup = new THREE.Group();
         
-        // Goal posts
+        // Postes de la portería
         const postGeometry = new THREE.CylinderGeometry(0.1, 0.1, 2.44);
         const postMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
         
@@ -191,7 +205,7 @@ class PenaltyVRGame {
         rightPost.castShadow = true;
         goalGroup.add(rightPost);
         
-        // Crossbar
+        // Travesaño
         const crossbarGeometry = new THREE.CylinderGeometry(0.1, 0.1, 7.32);
         const crossbar = new THREE.Mesh(crossbarGeometry, postMaterial);
         crossbar.rotation.z = Math.PI / 2;
@@ -199,7 +213,7 @@ class PenaltyVRGame {
         crossbar.castShadow = true;
         goalGroup.add(crossbar);
         
-        // Goal net (visual)
+        // Red de la portería (visual)
         const netGeometry = new THREE.PlaneGeometry(7.32, 2.44);
         const netMaterial = new THREE.MeshBasicMaterial({ 
             color: 0xffffff, 
@@ -219,9 +233,8 @@ class PenaltyVRGame {
         const ballGeometry = new THREE.SphereGeometry(0.11, 32, 32);
         const ballMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
         
-        // Add soccer ball pattern
-        const loader = new THREE.TextureLoader();
-        // Since we can't load external textures, we'll use a simple white ball
+        // Como no podemos cargar texturas externas directamente en este ejemplo,
+        // usaremos una pelota blanca simple.
         
         this.ball = new THREE.Mesh(ballGeometry, ballMaterial);
         this.ball.castShadow = true;
@@ -232,22 +245,22 @@ class PenaltyVRGame {
     createShooter() {
         const shooterGroup = new THREE.Group();
         
-        // Simple humanoid shooter
-        // Body
+        // Tirador humanoide simple
+        // Cuerpo
         const bodyGeometry = new THREE.CylinderGeometry(0.3, 0.4, 1.2);
         const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x0066cc });
         const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
         body.position.y = 1.2;
         shooterGroup.add(body);
         
-        // Head
+        // Cabeza
         const headGeometry = new THREE.SphereGeometry(0.2);
         const headMaterial = new THREE.MeshLambertMaterial({ color: 0xffdbac });
         const head = new THREE.Mesh(headGeometry, headMaterial);
         head.position.y = 2;
         shooterGroup.add(head);
         
-        // Arms
+        // Brazos
         const armGeometry = new THREE.CylinderGeometry(0.08, 0.08, 0.8);
         const armMaterial = new THREE.MeshLambertMaterial({ color: 0xffdbac });
         
@@ -261,7 +274,7 @@ class PenaltyVRGame {
         rightArm.rotation.z = -Math.PI / 6;
         shooterGroup.add(rightArm);
         
-        // Legs
+        // Piernas
         const legGeometry = new THREE.CylinderGeometry(0.1, 0.1, 1);
         const legMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
         
@@ -279,7 +292,7 @@ class PenaltyVRGame {
     }
     
     createHands() {
-        // Virtual hands for collision detection
+        // Manos virtuales para detección de colisiones
         const handGeometry = new THREE.SphereGeometry(0.1);
         const handMaterial = new THREE.MeshBasicMaterial({ 
             color: 0xff0000, 
@@ -295,7 +308,7 @@ class PenaltyVRGame {
     }
     
     resetBallPosition() {
-        this.ball.position.set(0, 0.11, 7.5); // On penalty spot
+        this.ball.position.set(0, 0.11, 7.5); // En el punto de penalti
         this.ballVelocity.set(0, 0, 0);
         this.ballInPlay = false;
     }
@@ -305,7 +318,7 @@ class PenaltyVRGame {
         
         this.resetBallPosition();
         
-        // Animate shooter kick
+        // Anima el disparo del tirador
         setTimeout(() => {
             this.shootBall();
         }, 1000);
@@ -316,15 +329,15 @@ class PenaltyVRGame {
         
         this.ballInPlay = true;
         
-        // Random shot direction and power
-        const targetX = (Math.random() - 0.5) * 6; // Random horizontal position in goal
-        const targetY = Math.random() * 2 + 0.2; // Random height
-        const power = 12 + Math.random() * 8; // Random power
+        // Dirección y potencia aleatorias del disparo
+        const targetX = (Math.random() - 0.5) * 6; // Posición horizontal aleatoria en la portería
+        const targetY = Math.random() * 2 + 0.2; // Altura aleatoria
+        const power = 12 + Math.random() * 8; // Potencia aleatoria
         
         const direction = new THREE.Vector3(targetX, targetY, -12).sub(this.ball.position).normalize();
         this.ballVelocity = direction.multiplyScalar(power);
         
-        // Add some curve to the shot
+        // Añade algo de efecto al disparo
         this.ballVelocity.x += (Math.random() - 0.5) * 2;
         this.ballVelocity.y += Math.random() * 3;
     }
@@ -332,39 +345,39 @@ class PenaltyVRGame {
     updateBall(deltaTime) {
         if (!this.ballInPlay) return;
         
-        // Apply gravity
+        // Aplica gravedad
         this.ballVelocity.add(this.gravity.clone().multiplyScalar(deltaTime));
         
-        // Update position
+        // Actualiza la posición
         const deltaPosition = this.ballVelocity.clone().multiplyScalar(deltaTime);
         this.ball.position.add(deltaPosition);
         
-        // Check ground collision
+        // Comprueba la colisión con el suelo
         if (this.ball.position.y <= 0.11) {
             this.ball.position.y = 0.11;
-            this.ballVelocity.y = Math.abs(this.ballVelocity.y) * 0.6; // Bounce with damping
-            this.ballVelocity.x *= 0.8; // Friction
-            this.ballVelocity.z *= 0.8; // Friction
+            this.ballVelocity.y = Math.abs(this.ballVelocity.y) * 0.6; // Rebote con amortiguación
+            this.ballVelocity.x *= 0.8; // Fricción
+            this.ballVelocity.z *= 0.8; // Fricción
         }
         
-        // Check goal collision
+        // Comprueba la colisión con la portería
         if (this.ball.position.z <= -12) {
             if (Math.abs(this.ball.position.x) <= 3.66 && this.ball.position.y <= 2.44) {
-                // Goal scored by shooter
+                // Gol marcado por el tirador
                 this.shooterScore++;
                 this.updateScore();
                 this.ballInPlay = false;
                 setTimeout(() => this.nextRound(), 2000);
             } else {
-                // Ball hit post or crossbar
+                // La pelota golpeó un poste o el travesaño
                 this.ballVelocity.z = Math.abs(this.ballVelocity.z) * 0.8;
             }
         }
         
-        // Check hand collision
+        // Comprueba la colisión con las manos
         this.checkHandCollision();
         
-        // Remove ball if it goes too far
+        // Elimina la pelota si se va demasiado lejos
         if (this.ball.position.z < -20 || this.ball.position.y < -5) {
             this.ballInPlay = false;
             setTimeout(() => this.nextRound(), 1000);
@@ -380,12 +393,12 @@ class PenaltyVRGame {
             if (hand && hand.position) {
                 const distance = ballPosition.distanceTo(hand.position);
                 if (distance < ballRadius + handRadius && this.ballInPlay) {
-                    // Ball saved!
+                    // ¡Balón salvado!
                     this.goalkeeperScore++;
                     this.updateScore();
                     this.ballInPlay = false;
                     
-                    // Add visual feedback
+                    // Añade retroalimentación visual
                     hand.material.color.setHex(0x00ff00);
                     setTimeout(() => {
                         hand.material.color.setHex(0xff0000);
@@ -398,7 +411,7 @@ class PenaltyVRGame {
     }
     
     updateControllerPositions() {
-        // Update hand positions based on VR controllers
+        // Actualiza las posiciones de las manos basándose en los controladores VR
         this.controllers.forEach((controller, index) => {
             if (controller.userData.isSelecting) {
                 const hand = index === 0 ? this.hands.left : this.hands.right;
@@ -409,9 +422,9 @@ class PenaltyVRGame {
             }
         });
         
-        // If no VR controllers, use mouse/touch simulation
+        // Si no hay controladores VR, usa la simulación de ratón/toque
         if (!this.renderer.xr.isPresenting) {
-            // Simple hand positioning for non-VR mode
+            // Posicionamiento simple de manos para modo no VR
             this.hands.left.position.set(-0.5, 1.5, -1);
             this.hands.right.position.set(0.5, 1.5, -1);
             this.hands.left.visible = true;
@@ -484,7 +497,7 @@ class PenaltyVRGame {
     setupEventListeners() {
         window.addEventListener('resize', () => this.onWindowResize());
         
-        // Keyboard controls for non-VR testing
+        // Controles de teclado para pruebas sin VR
         document.addEventListener('keydown', (event) => {
             if (!this.renderer.xr.isPresenting) {
                 switch(event.code) {
@@ -537,14 +550,14 @@ class PenaltyVRGame {
     }
 }
 
-// Global function for restart button
+// Función global para el botón de reiniciar
 window.restartGame = function() {
     if (window.game) {
         window.game.restart();
     }
 };
 
-// Initialize game when page loads
+// Inicializa el juego cuando la página se carga
 window.addEventListener('DOMContentLoaded', () => {
     window.game = new PenaltyVRGame();
 });

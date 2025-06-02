@@ -1,139 +1,84 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
-    <title>Penalty VR Game - Meta Quest 3</title>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Penalty VR Game</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background-color: #000;
-            font-family: Arial, sans-serif;
-            overflow: hidden;
-        }
-        
+        body { margin: 0; overflow: hidden; font-family: sans-serif; }
         #container {
-            width: 100%;
+            width: 100vw;
             height: 100vh;
+            display: block;
         }
-        
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
+        /* Oculta los elementos HTML originales; se renderizarán en 3D */
+        /* Usamos visibility y opacity para que html2canvas pueda leerlos */
+        #vrMenu, #countdown, #gameOver, #score-display {
+            visibility: hidden; /* Hace el elemento invisible */
+            opacity: 0;          /* Lo hace completamente transparente */
+            position: absolute; /* Mantenlo para un posicionamiento flexible */
             color: white;
-            font-size: 24px;
-            z-index: 100;
+            padding: 20px;
             background: rgba(0,0,0,0.7);
-            padding: 15px;
             border-radius: 10px;
+            text-align: center;
+            box-sizing: border-box; /* Asegura que el padding no desborde el ancho/alto */
         }
-        
+
+        /* Posiciones específicas para elementos que lo requieran */
         #gameOver {
-            position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            color: white;
-            font-size: 32px;
-            text-align: center;
-            background: rgba(0,0,0,0.8);
-            padding: 30px;
-            border-radius: 15px;
-            display: none;
-            z-index: 200;
+            z-index: 100;
         }
-        
-        #instructions {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: white;
-            font-size: 16px;
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
-            max-width: 300px;
-        }
-        
         #vrMenu {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px;
-            border-radius: 10px;
-            display: none;
             flex-direction: column;
             gap: 10px;
-            z-index: 250;
         }
-        
-        .vrMenuBtn {
+        #vrMenu button {
+            padding: 10px 20px;
+            font-size: 1.2em;
             background: #007bff;
             color: white;
             border: none;
-            padding: 12px 20px;
-            font-size: 16px;
-            border-radius: 8px;
+            border-radius: 5px;
             cursor: pointer;
-            text-align: left;
-            min-width: 180px;
         }
-        
-        .vrMenuBtn:hover {
-            background: #0056b3;
-        }
-        
         #countdown {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 72px;
+            font-size: 4em;
             font-weight: bold;
-            text-shadow: 0 0 10px black;
-            z-index: 300;
-            display: none;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            /* La posición en 3D será manejada por Three.js */
+        }
+        #score-display {
+            /* Estas propiedades de posición y tamaño se aplican si el elemento está visible */
+            top: 10px;
+            right: 10px;
+            font-size: 1.2em;
         }
     </style>
 </head>
 <body>
     <div id="container"></div>
-    
-    <div id="ui">
-        <div>Portero: <span id="goalkeeperScore">0</span></div>
-        <div>Rival: <span id="shooterScore">0</span></div>
-        <div>Ronda: <span id="round">1</span></div>
+
+    <div id="vrMenu">
+        <h2>Menú VR</h2>
+        <button id="pauseBtn">⏸ Pausa</button>
+        <button id="restartBtn">🔄 Reiniciar</button>
+        <button id="startRoundBtn">⚽ Iniciar Ronda</button>
     </div>
-    
+
+    <div id="countdown"></div>
+
     <div id="gameOver">
         <h2 id="gameResult"></h2>
         <p id="finalScore"></p>
-        <button onclick="restartGame()">Jugar de Nuevo</button>
+        <button onclick="restartGame()">Reiniciar Juego</button>
     </div>
-    
-    <div id="vrMenu">
-        <button id="pauseBtn" class="vrMenuBtn">⏸ Pausa</button>
-        <button id="restartBtn" class="vrMenuBtn">🔄 Reiniciar</button>
-        <button id="startRoundBtn" class="vrMenuBtn">⚽ Iniciar Ronda</button>
-    </div>
-    
-    <div id="countdown"></div>
-    
-    <div id="instructions">
-        <strong>Instrucciones VR:</strong><br>
-        • Presiona el gatillo para seleccionar<br>
-        • Aprieta el botón lateral (squeeze) para mostrar/ocultar menú<br>
-        • Usa las manos para detener el balón<br>
-        • ¡Detén 7 penales para ganar!<br><br>
-        
-        <strong>Controles del Menú:</strong><br>
-        ⏸ Pausa: Pausa el juego<br>
-        🔄 Reiniciar: Comienza un nuevo juego<br>
-        ⚽ Iniciar Ronda: Comienza el próximo penal
+
+    <div id="score-display">
+        Portero: <span id="goalkeeperScore">0</span> | Rival: <span id="shooterScore">0</span> | Ronda: <span id="round">1</span>
     </div>
 
     <script type="importmap">
@@ -144,6 +89,8 @@
             }
         }
     </script>
+
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
 
     <script type="module" src="./js/main.js"></script>
 </body>

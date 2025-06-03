@@ -15,6 +15,7 @@ class PenaltyVRGame {
         this.maxScore = 7;
         this.gameActive = true;
         this.ballInPlay = false;
+        this.isPaused = false;
 
         // Game objects
         this.ball = null;
@@ -31,9 +32,20 @@ class PenaltyVRGame {
         this.ballVelocity = new THREE.Vector3();
         this.gravity = new THREE.Vector3(0, -9.81, 0);
 
-        // VR Controllers
+        // VR Controllers - Mejorado
         this.controllers = [];
         this.controllerGrips = [];
+        this.buttonStates = {
+            left: { buttons: [], prevButtons: [] },
+            right: { buttons: [], prevButtons: [] }
+        };
+
+        // Cooldowns para evitar múltiples activaciones
+        this.buttonCooldowns = {
+            penalty: 0,
+            pause: 0,
+            restart: 0
+        };
 
         this.init();
     }
@@ -98,7 +110,7 @@ class PenaltyVRGame {
                                 optionalFeatures: ['hand-tracking', 'bounded-floor']
                             }).then((session) => {
                                 this.renderer.xr.setSession(session);
-                                this.setupQuest3Controls(session);
+                                this.setupQuest3Controls();
                             }).catch((error) => {
                                 console.warn('Error al iniciar sesión VR:', error);
                                 alert('No se pudo iniciar la sesión VR. Jugando en modo desktop.');
@@ -115,6 +127,7 @@ class PenaltyVRGame {
             }
         };
 
+        // Configuración mejorada de controladores
         for (let i = 0; i < 2; i++) {
             const controller = this.renderer.xr.getController(i);
             controller.addEventListener('selectstart', () => this.onControllerSelect(i));
@@ -125,43 +138,241 @@ class PenaltyVRGame {
             const grip = this.renderer.xr.getControllerGrip(i);
             this.scene.add(grip);
             this.controllerGrips.push(grip);
+
+            // Inicializar estados de botones
+            this.buttonStates.left.buttons = new Array(10).fill(false);
+            this.buttonStates.left.prevButtons = new Array(10).fill(false);
+            this.buttonStates.right.buttons = new Array(10).fill(false);
+            this.buttonStates.right.prevButtons = new Array(10).fill(false);
         }
     }
 
-    setupQuest3Controls(session) {
-        session.addEventListener('select', (event) => {
-            if (!event.inputSource.gamepad) return;
-            
-            // Botón B (controlador derecho - índice 1) - Iniciar penal
-            if (event.inputSource.handedness === 'right' && 
-                event.inputSource.gamepad.buttons[1].pressed) {
-                this.startPenalty();
+    setupQuest3Controls() {
+        // Sistema mejorado de detección de botones
+        console.log('Configurando controles Quest 3...');
+        
+        // Crear un loop para detectar el estado de los botones en cada frame
+        this.controllerUpdateLoop = () => {
+            if (!this.renderer.xr.isPresenting) return;
+
+            const session = this.renderer.xr.getSession();
+            if (!session) return;
+
+            // Obtener el frame actual
+            session.requestAnimationFrame((time, frame) => {
+                if (!frame) return;
+
+                const inputSources = session.inputSources;
+                
+                for (let i = 0; i < inputSources.length; i++) {
+                    const inputSource = inputSources[i];
+                    if (!inputSource.gamepad) continue;
+
+                    const handedness = inputSource.handedness; // 'left' o 'right'
+                    const gamepad = inputSource.gamepad;
+                    
+                    // Guardar estado anterior
+                    const buttonState = this.buttonStates[handedness];
+                    buttonState.prevButtons = [...buttonState.buttons];
+                    
+                    // Actualizar estado actual
+                    for (let j = 0; j < gamepad.buttons.length; j++) {
+                        buttonState.buttons[j] = gamepad.buttons[j].pressed;
+                    }
+                    
+                    // Detectar presionado (transición de false a true)
+                    for (let j = 0; j < gamepad.buttons.length; j++) {
+                        if (buttonState.buttons[j] && !buttonState.prevButtons[j]) {
+                            this.handleButtonPress(handedness, j);
+                        }
+                    }
+                }
+            });
+        };
+    }
+
+    handleButtonPress(handedness, buttonIndex) {
+        const currentTime = this.clock.getElapsedTime();
+        
+        console.log(`Botón presionado: ${handedness} - Índice: ${buttonIndex}`);
+
+        // Mapeo de botones Quest 3:
+        // Controlador Derecho: 0=Trigger, 1=Grip, 2=B, 3=A, 4=Thumbstick
+        // Controlador Izquierdo: 0=Trigger, 1=Grip, 2=Y, 3=X, 4=Thumbstick
+
+        if (handedness === 'right') {
+            switch (buttonIndex) {
+                case 0: // Trigger derecho - Iniciar penal (alternativo)
+                    if (currentTime - this.buttonCooldowns.penalty > 1.0) {
+                        this.startPenalty();
+                        this.buttonCooldowns.penalty = currentTime;
+                    }
+                    break;
+                case 1: // Grip derecho - Acción secundaria
+                    this.showInstructions();
+                    break;
+                case 2: // Botón B - Iniciar penal (principal)
+                    if (currentTime - this.buttonCooldowns.penalty > 1.0) {
+                        this.startPenalty();
+                        this.buttonCooldowns.penalty = currentTime;
+                        this.showButtonFeedback('B - Penalty!');
+                    }
+                    break;
+                case 3: // Botón A - Resetear posición de manos
+                    this.resetHandPositions();
+                    this.showButtonFeedback('A - Hands Reset');
+                    break;
+                case 4: // Thumbstick derecho - Velocidad de manos
+                    this.toggleHandSpeed();
+                    break;
             }
-            
-            // Botón Y (controlador izquierdo - índice 3) - Pausa
-            if (event.inputSource.handedness === 'left' && 
-                event.inputSource.gamepad.buttons[3].pressed) {
-                this.togglePause();
+        } else if (handedness === 'left') {
+            switch (buttonIndex) {
+                case 0: // Trigger izquierdo - Mano izquierda activa
+                    this.activateLeftHand();
+                    break;
+                case 1: // Grip izquierdo - Ambas manos activas
+                    this.activateBothHands();
+                    break;
+                case 2: // Botón Y - Pausa/Reanudar
+                    if (currentTime - this.buttonCooldowns.pause > 0.5) {
+                        this.togglePause();
+                        this.buttonCooldowns.pause = currentTime;
+                        this.showButtonFeedback(`Y - ${this.isPaused ? 'Paused' : 'Resumed'}`);
+                    }
+                    break;
+                case 3: // Botón X - Reiniciar juego
+                    if (currentTime - this.buttonCooldowns.restart > 2.0) {
+                        this.restart();
+                        this.buttonCooldowns.restart = currentTime;
+                        this.showButtonFeedback('X - Game Restarted');
+                    }
+                    break;
+                case 4: // Thumbstick izquierdo - Cambiar dificultad
+                    this.changeDifficulty();
+                    break;
             }
-            
-            // Botón X (controlador izquierdo - índice 2) - Reiniciar
-            if (event.inputSource.handedness === 'left' && 
-                event.inputSource.gamepad.buttons[2].pressed) {
-                this.restart();
-            }
+        }
+    }
+
+    showButtonFeedback(message) {
+        // Crear un elemento de texto 3D temporal para mostrar feedback
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.width = 512;
+        canvas.height = 128;
+        
+        context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        context.fillStyle = 'white';
+        context.font = 'bold 48px Arial';
+        context.textAlign = 'center';
+        context.fillText(message, canvas.width / 2, canvas.height / 2 + 16);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.MeshBasicMaterial({ 
+            map: texture, 
+            transparent: true,
+            opacity: 0.9
         });
+        
+        const geometry = new THREE.PlaneGeometry(2, 0.5);
+        const mesh = new THREE.Mesh(geometry, material);
+        
+        // Posicionar el texto frente al jugador
+        mesh.position.set(0, 2.5, -2);
+        mesh.lookAt(this.camera.position);
+        
+        this.scene.add(mesh);
+        
+        // Remover después de 2 segundos
+        setTimeout(() => {
+            this.scene.remove(mesh);
+            geometry.dispose();
+            material.dispose();
+            texture.dispose();
+        }, 2000);
+    }
+
+    showInstructions() {
+        console.log('Instrucciones del juego:');
+        console.log('Botón B (derecho): Iniciar penal');
+        console.log('Botón Y (izquierdo): Pausar/Reanudar');
+        console.log('Botón X (izquierdo): Reiniciar');
+        console.log('Triggers: Activar manos');
+    }
+
+    resetHandPositions() {
+        this.hands.left.position.set(-0.5, 1.5, -1);
+        this.hands.right.position.set(0.5, 1.5, -1);
+    }
+
+    activateLeftHand() {
+        this.hands.left.material.color.setHex(0x00ff00);
+        setTimeout(() => {
+            this.hands.left.material.color.setHex(0xff0000);
+        }, 200);
+    }
+
+    activateBothHands() {
+        this.hands.left.material.color.setHex(0x00ff00);
+        this.hands.right.material.color.setHex(0x00ff00);
+        setTimeout(() => {
+            this.hands.left.material.color.setHex(0xff0000);
+            this.hands.right.material.color.setHex(0xff0000);
+        }, 200);
+    }
+
+    toggleHandSpeed() {
+        // Implementar velocidad variable de las manos
+        console.log('Velocidad de manos cambiada');
+    }
+
+    changeDifficulty() {
+        // Cambiar dificultad del juego
+        console.log('Dificultad cambiada');
     }
 
     togglePause() {
-        this.gameActive = !this.gameActive;
-        console.log(`Juego ${this.gameActive ? 'reanudado' : 'pausado'}`);
+        this.isPaused = !this.isPaused;
+        this.gameActive = !this.isPaused;
+        console.log(`Juego ${this.isPaused ? 'pausado' : 'reanudado'}`);
     }
 
     startPenalty() {
-        if (!this.gameActive || this.ballInPlay) return;
+        if (!this.gameActive || this.ballInPlay || this.isPaused) {
+            console.log('No se puede iniciar penal: gameActive=', this.gameActive, 'ballInPlay=', this.ballInPlay, 'isPaused=', this.isPaused);
+            return;
+        }
+        
+        console.log('Iniciando penal...');
         this.executePenalty();
     }
 
+    // ... resto del código permanece igual hasta animate()
+
+    animate() {
+        const deltaTime = this.clock.getDelta();
+
+        // Actualizar el loop de controladores
+        if (this.controllerUpdateLoop && this.renderer.xr.isPresenting) {
+            this.controllerUpdateLoop();
+        }
+
+        if (this.mixer) {
+            this.mixer.update(deltaTime);
+        }
+
+        if (this.gameActive && !this.isPaused) {
+            this.updateBall(deltaTime);
+        }
+
+        this.updateControllerPositions();
+        this.renderer.render(this.scene, this.camera);
+    }
+
+    // Incluir aquí el resto de métodos del código original...
     executePenalty() {
         this.resetBallPosition();
 
@@ -568,6 +779,7 @@ class PenaltyVRGame {
         this.round = 1;
         this.gameActive = true;
         this.ballInPlay = false;
+        this.isPaused = false;
 
         const gameOverDiv = document.getElementById('gameOver');
         if (gameOverDiv) {
@@ -576,6 +788,13 @@ class PenaltyVRGame {
 
         this.updateUI();
         this.resetBallPosition();
+        
+        // Resetear cooldowns
+        this.buttonCooldowns.penalty = 0;
+        this.buttonCooldowns.pause = 0;
+        this.buttonCooldowns.restart = 0;
+        
+        console.log('Juego reiniciado');
     }
 
     setupEventListeners() {
@@ -645,21 +864,6 @@ class PenaltyVRGame {
 
     startGameLoop() {
         this.renderer.setAnimationLoop(() => this.animate());
-    }
-
-    animate() {
-        const deltaTime = this.clock.getDelta();
-
-        if (this.mixer) {
-            this.mixer.update(deltaTime);
-        }
-
-        if (this.gameActive) {
-            this.updateBall(deltaTime);
-        }
-
-        this.updateControllerPositions();
-        this.renderer.render(this.scene, this.camera);
     }
 }
 

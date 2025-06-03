@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
 
+
 class PenaltyVRGame {
     constructor() {
         this.scene = null;

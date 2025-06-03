@@ -15,9 +15,6 @@ class PenaltyVRGame {
         this.maxScore = 7;
         this.gameActive = true;
         this.ballInPlay = false;
-        this.countdownActive = false;
-        this.countdownValue = 3;
-        this.vrMenuVisible = false;
 
         // Game objects
         this.ball = null;
@@ -37,7 +34,6 @@ class PenaltyVRGame {
         // VR Controllers
         this.controllers = [];
         this.controllerGrips = [];
-        this.menuRaycasters = [];
 
         this.init();
     }
@@ -47,7 +43,6 @@ class PenaltyVRGame {
         this.setupCamera();
         this.setupRenderer();
         this.setupVR();
-        this.setupVRMenu();
         this.setupLighting();
         this.createStadium();
         this.createGoal();
@@ -89,24 +84,12 @@ class PenaltyVRGame {
     }
 
     setupVR() {
-        const vrButton = document.createElement('button');
-        vrButton.style.position = 'absolute';
-        vrButton.style.bottom = '20px';
-        vrButton.style.right = '20px';
-        vrButton.style.padding = '12px 24px';
-        vrButton.style.border = 'none';
-        vrButton.style.borderRadius = '6px';
-        vrButton.style.background = '#007bff';
-        vrButton.style.color = 'white';
-        vrButton.style.fontSize = '16px';
-        vrButton.style.cursor = 'pointer';
-        vrButton.innerHTML = 'Iniciar VR';
+        const vrButton = document.getElementById('vrButton');
 
         vrButton.onclick = () => {
             if (this.renderer.xr.isPresenting) {
                 this.renderer.xr.getSession().end();
             } else {
-                // Verificar soporte VR antes de intentar iniciar sesión
                 if ('xr' in navigator) {
                     navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
                         if (supported) {
@@ -115,6 +98,7 @@ class PenaltyVRGame {
                                 optionalFeatures: ['hand-tracking', 'bounded-floor']
                             }).then((session) => {
                                 this.renderer.xr.setSession(session);
+                                this.setupQuest3Controls(session);
                             }).catch((error) => {
                                 console.warn('Error al iniciar sesión VR:', error);
                                 alert('No se pudo iniciar la sesión VR. Jugando en modo desktop.');
@@ -131,13 +115,10 @@ class PenaltyVRGame {
             }
         };
 
-        document.body.appendChild(vrButton);
-
         for (let i = 0; i < 2; i++) {
             const controller = this.renderer.xr.getController(i);
             controller.addEventListener('selectstart', () => this.onControllerSelect(i));
             controller.addEventListener('selectend', () => this.onControllerRelease(i));
-            controller.addEventListener('squeezestart', () => this.toggleVRMenu());
             this.scene.add(controller);
             this.controllers.push(controller);
 
@@ -147,146 +128,38 @@ class PenaltyVRGame {
         }
     }
 
-    setupVRMenu() {
-        this.vrMenu = document.getElementById('vrMenu');
-        this.countdownElement = document.getElementById('countdown');
-
-        if (!this.vrMenu) {
-            console.warn('Elemento vrMenu no encontrado, creando dinámicamente...');
-            this.createVRMenuDynamically();
-            return;
-        }
-
-        // Solo proceder si los elementos existen
-        const pauseBtn = document.getElementById('pauseBtn');
-        const restartBtn = document.getElementById('restartBtn');
-        const startRoundBtn = document.getElementById('startRoundBtn');
-
-        if (pauseBtn) {
-            pauseBtn.addEventListener('click', () => this.togglePause());
-        } else {
-            console.error('ERROR: Botón pauseBtn no encontrado');
-        }
-
-        if (restartBtn) {
-            restartBtn.addEventListener('click', () => this.restart());
-        } else {
-            console.error('ERROR: Botón restartBtn no encontrado');
-        }
-
-        if (startRoundBtn) {
-            startRoundBtn.addEventListener('click', () => this.startPenalty());
-        } else {
-            console.error('ERROR: Botón startRoundBtn no encontrado');
-        }
-    }
-
-    createVRMenuDynamically() {
-        // Crear elementos del menú dinámicamente
-        this.vrMenu = document.createElement('div');
-        this.vrMenu.id = 'vrMenu';
-        this.vrMenu.style.display = 'none';
-        this.vrMenu.style.position = 'absolute';
-        this.vrMenu.style.top = '20px';
-        this.vrMenu.style.left = '20px';
-        this.vrMenu.style.background = 'rgba(0,0,0,0.8)';
-        this.vrMenu.style.padding = '20px';
-        this.vrMenu.style.borderRadius = '10px';
-        this.vrMenu.style.color = 'white';
-
-        const pauseBtn = document.createElement('button');
-        pauseBtn.id = 'pauseBtn';
-        pauseBtn.textContent = '⏸ Pausa';
-        pauseBtn.style.margin = '5px';
-        pauseBtn.addEventListener('click', () => this.togglePause());
-
-        const restartBtn = document.createElement('button');
-        restartBtn.id = 'restartBtn';
-        restartBtn.textContent = '🔄 Reiniciar';
-        restartBtn.style.margin = '5px';
-        restartBtn.addEventListener('click', () => this.restart());
-
-        const startRoundBtn = document.createElement('button');
-        startRoundBtn.id = 'startRoundBtn';
-        startRoundBtn.textContent = '⚽ Iniciar Ronda';
-        startRoundBtn.style.margin = '5px';
-        startRoundBtn.addEventListener('click', () => this.startPenalty());
-
-        this.vrMenu.appendChild(pauseBtn);
-        this.vrMenu.appendChild(restartBtn);
-        this.vrMenu.appendChild(startRoundBtn);
-
-        document.body.appendChild(this.vrMenu);
-
-        // Crear elemento countdown
-        this.countdownElement = document.createElement('div');
-        this.countdownElement.id = 'countdown';
-        this.countdownElement.style.position = 'absolute';
-        this.countdownElement.style.top = '50%';
-        this.countdownElement.style.left = '50%';
-        this.countdownElement.style.transform = 'translate(-50%, -50%)';
-        this.countdownElement.style.fontSize = '4em';
-        this.countdownElement.style.color = 'white';
-        this.countdownElement.style.textShadow = '2px 2px 4px rgba(0,0,0,0.8)';
-        this.countdownElement.style.display = 'none';
-
-        document.body.appendChild(this.countdownElement);
-    }
-
-    toggleVRMenu() {
-        this.vrMenuVisible = !this.vrMenuVisible;
-        if (this.vrMenu) {
-            this.vrMenu.style.display = this.vrMenuVisible ? 'flex' : 'none';
-        }
+    setupQuest3Controls(session) {
+        session.addEventListener('select', (event) => {
+            if (!event.inputSource.gamepad) return;
+            
+            // Botón B (controlador derecho - índice 1) - Iniciar penal
+            if (event.inputSource.handedness === 'right' && 
+                event.inputSource.gamepad.buttons[1].pressed) {
+                this.startPenalty();
+            }
+            
+            // Botón Y (controlador izquierdo - índice 3) - Pausa
+            if (event.inputSource.handedness === 'left' && 
+                event.inputSource.gamepad.buttons[3].pressed) {
+                this.togglePause();
+            }
+            
+            // Botón X (controlador izquierdo - índice 2) - Reiniciar
+            if (event.inputSource.handedness === 'left' && 
+                event.inputSource.gamepad.buttons[2].pressed) {
+                this.restart();
+            }
+        });
     }
 
     togglePause() {
         this.gameActive = !this.gameActive;
-        const pauseBtn = document.getElementById('pauseBtn');
-        if (pauseBtn) {
-            pauseBtn.textContent = this.gameActive ? '⏸ Pausa' : '▶ Continuar';
-        }
+        console.log(`Juego ${this.gameActive ? 'reanudado' : 'pausado'}`);
     }
 
-    startCountdown() {
-        this.countdownActive = true;
-        this.countdownValue = 3;
-
-        // Verificación robusta del elemento countdown
-        if (!this.countdownElement || !this.countdownElement.style) {
-            console.error('Elemento countdown no disponible, continuando sin UI');
-            this.executePenalty();
-            return;
-        }
-
-        this.countdownElement.style.display = 'block';
-        this.countdownElement.textContent = this.countdownValue;
-
-        this.updateCountdown();
-    }
-
-    updateCountdown() {
-        if (!this.countdownElement) {
-            console.error('CountdownElement no disponible');
-            this.countdownActive = false;
-            this.executePenalty();
-            return;
-        }
-
-        if (this.countdownValue > 0) {
-            this.countdownElement.textContent = this.countdownValue;
-            this.countdownValue--;
-            setTimeout(() => this.updateCountdown(), 1000);
-        } else {
-            this.countdownElement.textContent = '¡YA!';
-            setTimeout(() => {
-                if (this.countdownElement) {
-                    this.countdownElement.style.display = 'none';
-                }
-                this.countdownActive = false;
-                this.executePenalty();
-            }, 500);
-        }
+    startPenalty() {
+        if (!this.gameActive || this.ballInPlay) return;
+        this.executePenalty();
     }
 
     executePenalty() {
@@ -341,15 +214,12 @@ class PenaltyVRGame {
 
     createStadium() {
         const groundGeometry = new THREE.PlaneGeometry(100, 100);
-
-        // Crear material básico sin texturas para evitar errores de carga
-        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 }); // Verde césped
+        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 });
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         this.scene.add(ground);
 
-        // Intentar cargar textura de forma opcional
         const textureLoader = new THREE.TextureLoader();
         textureLoader.load('./map/piso.jpg',
             (texture) => {
@@ -439,13 +309,11 @@ class PenaltyVRGame {
                 fbx.position.set(0, 0, 8);
                 fbx.rotation.y = Math.PI;
 
-                // Limpiar materiales problemáticos
                 fbx.traverse(function (child) {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
 
-                        // Simplificar material si hay problemas
                         if (child.material && child.material.map) {
                             const simpleMaterial = new THREE.MeshLambertMaterial({
                                 map: child.material.map
@@ -469,12 +337,10 @@ class PenaltyVRGame {
         );
     }
 
-    // MÉTODO AÑADIDO: setupAnimation
     setupAnimation(fbx) {
         if (fbx.animations && fbx.animations.length > 0) {
             this.mixer = new THREE.AnimationMixer(fbx);
 
-            // Buscar animación de patada o usar la primera disponible
             const kickAnimation = fbx.animations.find(anim =>
                 anim.name.toLowerCase().includes('kick') ||
                 anim.name.toLowerCase().includes('shoot') ||
@@ -493,7 +359,6 @@ class PenaltyVRGame {
         }
     }
 
-    // Método para crear un shooter predeterminado si el FBX falla
     createDefaultShooter() {
         const shooterGroup = new THREE.Group();
 
@@ -560,15 +425,9 @@ class PenaltyVRGame {
         this.ballVelocity.set(0, 0, 0);
         this.ballInPlay = false;
 
-        // Reiniciar la animación del shooter (si existe) a su estado inicial
         if (this.kickAction) {
             this.kickAction.stop();
         }
-    }
-
-    startPenalty() {
-        if (!this.gameActive || this.countdownActive) return;
-        this.startCountdown();
     }
 
     updateBall(deltaTime) {
@@ -665,7 +524,6 @@ class PenaltyVRGame {
         }
 
         this.updateUI();
-        setTimeout(() => this.startPenalty(), 1500);
     }
 
     updateScore() {
@@ -700,7 +558,6 @@ class PenaltyVRGame {
             finalScore.textContent = `Puntuación Final - Portero: ${this.goalkeeperScore} | Rival: ${this.shooterScore}`;
             gameOverDiv.style.display = 'block';
         } else {
-            // Crear elementos de fin de juego dinámicamente si no existen
             alert(`Juego terminado! Portero: ${this.goalkeeperScore} | Rival: ${this.shooterScore}`);
         }
     }
@@ -719,11 +576,7 @@ class PenaltyVRGame {
 
         this.updateUI();
         this.resetBallPosition();
-
-        setTimeout(() => this.startPenalty(), 2000);
     }
-
-
 
     setupEventListeners() {
         window.addEventListener('resize', () => this.onWindowResize());
@@ -764,6 +617,15 @@ class PenaltyVRGame {
                         this.hands.right.position.y -= moveAmount;
                         this.hands.left.position.y -= moveAmount;
                         break;
+                    case 'Space': // Barra espaciadora para iniciar penal
+                        this.startPenalty();
+                        break;
+                    case 'KeyP': // Tecla P para pausa
+                        this.togglePause();
+                        break;
+                    case 'KeyR': // Tecla R para reiniciar
+                        this.restart();
+                        break;
                 }
                 const maxX = 4;
                 const maxY = 2.5;
@@ -792,7 +654,7 @@ class PenaltyVRGame {
             this.mixer.update(deltaTime);
         }
 
-        if (this.gameActive && !this.countdownActive) {
+        if (this.gameActive) {
             this.updateBall(deltaTime);
         }
 
@@ -809,7 +671,6 @@ window.restartGame = function () {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Esperar un poco más para asegurar que todo esté listo
     setTimeout(() => {
         window.game = new PenaltyVRGame();
     }, 100);

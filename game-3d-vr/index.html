@@ -1,4 +1,4 @@
-y este tambien: <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <title>Penalty VR Game - Meta Quest 3</title>
@@ -57,46 +57,21 @@ y este tambien: <!DOCTYPE html>
             max-width: 300px;
         }
         
-        #vrMenu {
+        #vrButton {
             position: absolute;
             bottom: 20px;
             right: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px;
-            border-radius: 10px;
-            display: none;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 250;
-        }
-        
-        .vrMenuBtn {
             background: #007bff;
             color: white;
             border: none;
-            padding: 12px 20px;
+            padding: 12px 24px;
             font-size: 16px;
             border-radius: 8px;
             cursor: pointer;
-            text-align: left;
-            min-width: 180px;
         }
         
-        .vrMenuBtn:hover {
+        #vrButton:hover {
             background: #0056b3;
-        }
-        
-        #countdown {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 72px;
-            font-weight: bold;
-            text-shadow: 0 0 10px black;
-            z-index: 300;
-            display: none;
         }
     </style>
 </head>
@@ -115,25 +90,15 @@ y este tambien: <!DOCTYPE html>
         <button onclick="restartGame()">Jugar de Nuevo</button>
     </div>
     
-    <div id="vrMenu">
-        <button id="pauseBtn" class="vrMenuBtn">⏸ Pausa</button>
-        <button id="restartBtn" class="vrMenuBtn">🔄 Reiniciar</button>
-        <button id="startRoundBtn" class="vrMenuBtn">⚽ Iniciar Ronda</button>
-    </div>
-    
-    <div id="countdown"></div>
+    <button id="vrButton">Iniciar VR</button>
     
     <div id="instructions">
-        <strong>Instrucciones VR:</strong><br>
-        • Presiona el gatillo para seleccionar<br>
-        • Aprieta el botón lateral (squeeze) para mostrar/ocultar menú<br>
+        <strong>Controles Meta Quest 3:</strong><br>
+        • Botón B (derecho): Iniciar penal<br>
+        • Botón Y (izquierdo): Pausa<br>
+        • Botón X (izquierdo): Reiniciar<br>
         • Usa las manos para detener el balón<br>
-        • ¡Detén 7 penales para ganar!<br><br>
-        
-        <strong>Controles del Menú:</strong><br>
-        ⏸ Pausa: Pausa el juego<br>
-        🔄 Reiniciar: Comienza un nuevo juego<br>
-        ⚽ Iniciar Ronda: Comienza el próximo penal
+        • ¡Detén 7 penales para ganar!
     </div>
 
     <script type="importmap">

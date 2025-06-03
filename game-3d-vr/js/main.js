@@ -17,7 +17,7 @@ class PenaltyVRGame {
         this.ballInPlay = false;
         this.countdownActive = false;
         this.countdownValue = 3;
-        this.vrMenuVisible = false; // Track menu visibility
+        this.vrMenuVisible = false;
 
         // Game objects
         this.ball = null;
@@ -37,13 +37,7 @@ class PenaltyVRGame {
         // VR Controllers
         this.controllers = [];
         this.controllerGrips = [];
-        this.menuRaycasters = []; // Not directly used in this improved menu approach, but kept.
-
-        // 3D UI elements
-        this.vrMenuMesh = null;
-        this.countdownMesh = null;
-        this.scoreDisplayMesh = null; // New mesh for the score
-        this.gameOverMesh = null; // New mesh for game over screen
+        this.menuRaycasters = [];
 
         this.init();
     }
@@ -53,6 +47,7 @@ class PenaltyVRGame {
         this.setupCamera();
         this.setupRenderer();
         this.setupVR();
+        this.setupVRMenu();
         this.setupLighting();
         this.createStadium();
         this.createGoal();
@@ -60,7 +55,6 @@ class PenaltyVRGame {
         this.createShooter();
         this.createHands();
         this.setupEventListeners();
-        this.setup3DUI(); // New method to set up 3D UI
         this.startGameLoop();
     }
 
@@ -95,7 +89,6 @@ class PenaltyVRGame {
     }
 
     setupVR() {
-        // Keep the VR button for desktop users to easily enter/exit VR
         const vrButton = document.createElement('button');
         vrButton.style.position = 'absolute';
         vrButton.style.bottom = '20px';
@@ -113,6 +106,7 @@ class PenaltyVRGame {
             if (this.renderer.xr.isPresenting) {
                 this.renderer.xr.getSession().end();
             } else {
+                // Verificar soporte VR antes de intentar iniciar sesión
                 if ('xr' in navigator) {
                     navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
                         if (supported) {
@@ -121,52 +115,29 @@ class PenaltyVRGame {
                                 optionalFeatures: ['hand-tracking', 'bounded-floor']
                             }).then((session) => {
                                 this.renderer.xr.setSession(session);
-                                // Hide 2D menu when in VR
-                                if (this.vrMenu) this.vrMenu.style.display = 'none';
-                                if (this.countdownElement) this.countdownElement.style.display = 'none';
-                                if (document.getElementById('score-display')) document.getElementById('score-display').style.display = 'none';
-                                if (document.getElementById('gameOver')) document.getElementById('gameOver').style.display = 'none';
-
-                                // Show 3D UI
-                                this.vrMenuVisible = false; // Start with menu hidden
-                                this.vrMenuMesh.visible = false;
-                                this.scoreDisplayMesh.visible = true; // Score always visible in VR
-                                this.countdownMesh.visible = false;
-                                this.gameOverMesh.visible = false;
-
                             }).catch((error) => {
                                 console.warn('Error al iniciar sesión VR:', error);
                                 alert('No se pudo iniciar la sesión VR. Jugando en modo desktop.');
-                                this.handleExitVR();
                             });
                         } else {
                             console.warn('VR inmersivo no soportado');
                             alert('VR no soportado en este dispositivo. Jugando en modo desktop.');
-                            this.handleExitVR();
                         }
                     });
                 } else {
                     console.warn('WebXR no disponible');
                     alert('WebXR no disponible. Jugando en modo desktop.');
-                    this.handleExitVR();
                 }
             }
         };
+
         document.body.appendChild(vrButton);
-
-        // Add event listener for VR session ending
-        this.renderer.xr.addEventListener('sessionend', () => this.handleExitVR());
-
 
         for (let i = 0; i < 2; i++) {
             const controller = this.renderer.xr.getController(i);
             controller.addEventListener('selectstart', () => this.onControllerSelect(i));
             controller.addEventListener('selectend', () => this.onControllerRelease(i));
-            // Listen for 'squeezestart' on the right controller (index 1) for button 'B'
-            // The 'squeezestart' event generally maps to the grip/squeeze button.
-            // For a specific button like 'B', you need to check the gamepad button index.
-            // The 'B' button on the right Quest 3 controller is usually button 4 or 5.
-            // We'll add a 'gamepad' event listener in the animate loop for more precise control.
+            controller.addEventListener('squeezestart', () => this.toggleVRMenu());
             this.scene.add(controller);
             this.controllers.push(controller);
 
@@ -176,154 +147,17 @@ class PenaltyVRGame {
         }
     }
 
-    // New method to handle exiting VR, show 2D UI
-    handleExitVR() {
-        if (!this.renderer.xr.isPresenting) {
-            if (this.vrMenu) this.vrMenu.style.display = 'flex'; // Show 2D menu
-            if (this.countdownElement) this.countdownElement.style.display = 'block'; // Show 2D countdown
-            if (document.getElementById('score-display')) document.getElementById('score-display').style.display = 'block';
-            if (document.getElementById('gameOver')) document.getElementById('gameOver').style.display = 'block';
-
-            // Hide 3D UI
-            this.vrMenuMesh.visible = false;
-            this.countdownMesh.visible = false;
-            this.scoreDisplayMesh.visible = false;
-            this.gameOverMesh.visible = false;
-        }
-    }
-
-    // Helper to create a 3D plane from an HTML element
-    create3DUIFromHTMLElement(element, width, height, position, rotation = new THREE.Euler()) {
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        const resolution = 200; // Pixels per unit, adjust for quality
-        canvas.width = width * resolution;
-        canvas.height = height * resolution;
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.minFilter = THREE.LinearFilter;
-        texture.needsUpdate = true;
-
-        const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide });
-        const geometry = new THREE.PlaneGeometry(width, height);
-        const mesh = new THREE.Mesh(geometry, material);
-        mesh.position.copy(position);
-        mesh.rotation.copy(rotation);
-        mesh.visible = false; // Hidden by default
-
-        // Function to update the canvas texture with the latest HTML content
-        const updateTexture = () => {
-            const tempDiv = document.createElement('div');
-            tempDiv.style.width = `${canvas.width}px`;
-            tempDiv.style.height = `${canvas.height}px`;
-            tempDiv.style.backgroundColor = 'rgba(0,0,0,0.7)'; // Match original background
-            tempDiv.style.padding = '20px';
-            tempDiv.style.borderRadius = '10px';
-            tempDiv.style.boxSizing = 'border-box';
-            tempDiv.style.color = 'white';
-            tempDiv.style.display = 'flex';
-            tempDiv.style.flexDirection = 'column';
-            tempDiv.style.justifyContent = 'center';
-            tempDiv.style.alignItems = 'center';
-            tempDiv.style.fontFamily = 'sans-serif';
-            tempDiv.innerHTML = element.innerHTML;
-
-            // Render the HTML to the canvas
-            html2canvas(tempDiv, {
-                backgroundColor: null, // Transparent background for the main canvas
-                width: canvas.width,
-                height: canvas.height,
-                scale: 1,
-                logging: false,
-                useCORS: true // Important for images if any
-            }).then(renderCanvas => {
-                context.clearRect(0, 0, canvas.width, canvas.height);
-                context.drawImage(renderCanvas, 0, 0);
-                texture.needsUpdate = true;
-            }).catch(err => {
-                console.error("Error rendering HTML to canvas:", err);
-            });
-        };
-
-        // MutationObserver to automatically update texture when HTML content changes
-        const observer = new MutationObserver(updateTexture);
-        observer.observe(element, { childList: true, subtree: true, attributes: true });
-
-        // Initial update
-        updateTexture();
-
-        return { mesh, updateTexture };
-    }
-
-
-    setup3DUI() {
-        // You'll need the html2canvas library for this to work.
-        // Make sure to include it in your HTML:
-        // <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-
-        // Get your original HTML elements
+    setupVRMenu() {
         this.vrMenu = document.getElementById('vrMenu');
         this.countdownElement = document.getElementById('countdown');
-        const scoreDisplayElement = document.getElementById('score-display');
-        const gameOverElement = document.getElementById('gameOver');
 
-        // Create 3D versions of your UI elements
-        // Positions relative to the camera (e.g., in front of the camera, slightly above)
-        // Adjust these values for optimal placement in VR
-        const menuWidth = 2.0; // Width in Three.js units
-        const menuHeight = 1.5; // Height in Three.js units
-        const menuPosition = new THREE.Vector3(0, 0.5, -2); // In front, slightly up
+        if (!this.vrMenu) {
+            console.warn('Elemento vrMenu no encontrado, creando dinámicamente...');
+            this.createVRMenuDynamically();
+            return;
+        }
 
-        const countdownWidth = 0.8;
-        const countdownHeight = 0.4;
-        const countdownPosition = new THREE.Vector3(-0.8, 0.7, -1.5); // Top-left corner
-
-        const scoreWidth = 1.0;
-        const scoreHeight = 0.3;
-        const scorePosition = new THREE.Vector3(0.8, 0.7, -1.5); // Top-right corner
-
-        const gameOverWidth = 2.5;
-        const gameOverHeight = 1.5;
-        const gameOverPosition = new THREE.Vector3(0, 0.5, -2);
-
-
-        const vrMenu3D = this.create3DUIFromHTMLElement(this.vrMenu, menuWidth, menuHeight, menuPosition);
-        this.vrMenuMesh = vrMenu3D.mesh;
-        this.camera.add(this.vrMenuMesh); // Attach to camera
-        this.vrMenuUpdateTexture = vrMenu3D.updateTexture; // Store the update function
-
-        const countdown3D = this.create3DUIFromHTMLElement(this.countdownElement, countdownWidth, countdownHeight, countdownPosition);
-        this.countdownMesh = countdown3D.mesh;
-        this.camera.add(this.countdownMesh); // Attach to camera
-        this.countdownUpdateTexture = countdown3D.updateTexture; // Store the update function
-
-        const scoreDisplay3D = this.create3DUIFromHTMLElement(scoreDisplayElement, scoreWidth, scoreHeight, scorePosition);
-        this.scoreDisplayMesh = scoreDisplay3D.mesh;
-        this.camera.add(this.scoreDisplayMesh); // Attach to camera
-        this.scoreDisplayUpdateTexture = scoreDisplay3D.updateTexture;
-
-        const gameOver3D = this.create3DUIFromHTMLElement(gameOverElement, gameOverWidth, gameOverHeight, gameOverPosition);
-        this.gameOverMesh = gameOver3D.mesh;
-        this.camera.add(this.gameOverMesh); // Attach to camera
-        this.gameOverUpdateTexture = gameOver3D.updateTexture;
-
-        // Event listeners for the buttons on the HTML elements (these will work when rendered as textures)
-        // You'll need to use a Raycaster to interact with these buttons in VR.
-        // For simplicity in this example, we'll keep the buttons' actions tied to the class methods.
-        // The `html2canvas` rendering makes click detection a bit more complex.
-        // A better VR UI solution would use a library like `three-mesh-ui` for proper interactable 3D UI.
-        // For now, assume the buttons are clicked via controller rays for a more complete VR UI.
-        // We'll manage visibility based on controller input directly.
-
-        // Initial visibility
-        this.vrMenuMesh.visible = false;
-        this.countdownMesh.visible = false;
-        this.scoreDisplayMesh.visible = false; // Hide score until VR is active
-        this.gameOverMesh.visible = false;
-
-
-        // Set up the listeners for the original HTML buttons which will be called by our
-        // custom interaction logic for 3D UI.
+        // Solo proceder si los elementos existen
         const pauseBtn = document.getElementById('pauseBtn');
         const restartBtn = document.getElementById('restartBtn');
         const startRoundBtn = document.getElementById('startRoundBtn');
@@ -347,33 +181,70 @@ class PenaltyVRGame {
         }
     }
 
-    // Modified toggleVRMenu to work with 3D mesh visibility
+    createVRMenuDynamically() {
+        // Crear elementos del menú dinámicamente
+        this.vrMenu = document.createElement('div');
+        this.vrMenu.id = 'vrMenu';
+        this.vrMenu.style.display = 'none';
+        this.vrMenu.style.position = 'absolute';
+        this.vrMenu.style.top = '20px';
+        this.vrMenu.style.left = '20px';
+        this.vrMenu.style.background = 'rgba(0,0,0,0.8)';
+        this.vrMenu.style.padding = '20px';
+        this.vrMenu.style.borderRadius = '10px';
+        this.vrMenu.style.color = 'white';
+
+        const pauseBtn = document.createElement('button');
+        pauseBtn.id = 'pauseBtn';
+        pauseBtn.textContent = '⏸ Pausa';
+        pauseBtn.style.margin = '5px';
+        pauseBtn.addEventListener('click', () => this.togglePause());
+
+        const restartBtn = document.createElement('button');
+        restartBtn.id = 'restartBtn';
+        restartBtn.textContent = '🔄 Reiniciar';
+        restartBtn.style.margin = '5px';
+        restartBtn.addEventListener('click', () => this.restart());
+
+        const startRoundBtn = document.createElement('button');
+        startRoundBtn.id = 'startRoundBtn';
+        startRoundBtn.textContent = '⚽ Iniciar Ronda';
+        startRoundBtn.style.margin = '5px';
+        startRoundBtn.addEventListener('click', () => this.startPenalty());
+
+        this.vrMenu.appendChild(pauseBtn);
+        this.vrMenu.appendChild(restartBtn);
+        this.vrMenu.appendChild(startRoundBtn);
+
+        document.body.appendChild(this.vrMenu);
+
+        // Crear elemento countdown
+        this.countdownElement = document.createElement('div');
+        this.countdownElement.id = 'countdown';
+        this.countdownElement.style.position = 'absolute';
+        this.countdownElement.style.top = '50%';
+        this.countdownElement.style.left = '50%';
+        this.countdownElement.style.transform = 'translate(-50%, -50%)';
+        this.countdownElement.style.fontSize = '4em';
+        this.countdownElement.style.color = 'white';
+        this.countdownElement.style.textShadow = '2px 2px 4px rgba(0,0,0,0.8)';
+        this.countdownElement.style.display = 'none';
+
+        document.body.appendChild(this.countdownElement);
+    }
+
     toggleVRMenu() {
-        // Only toggle if in VR mode
-        if (this.renderer.xr.isPresenting) {
-            this.vrMenuVisible = !this.vrMenuVisible;
-            this.vrMenuMesh.visible = this.vrMenuVisible;
-            this.gameActive = !this.vrMenuVisible; // Pause game when menu is open
-        } else {
-            // Keep existing behavior for desktop
-            this.vrMenuVisible = !this.vrMenuVisible;
-            if (this.vrMenu) {
-                this.vrMenu.style.display = this.vrMenuVisible ? 'flex' : 'none';
-            }
+        this.vrMenuVisible = !this.vrMenuVisible;
+        if (this.vrMenu) {
+            this.vrMenu.style.display = this.vrMenuVisible ? 'flex' : 'none';
         }
     }
 
     togglePause() {
-        // In VR, pausing is tied to the menu being open
-        if (this.renderer.xr.isPresenting) {
-            // No direct pause button needed for 3D UI, opening menu pauses
-            // The `toggleVRMenu` method will handle pausing/unpausing
-        } else {
-            this.gameActive = !this.gameActive;
-            const pauseBtn = document.getElementById('pauseBtn');
-            if (pauseBtn) {
-                pauseBtn.textContent = this.gameActive ? '⏸ Pausa' : '▶ Continuar';
-            }
+        this.gameActive = !this.gameActive;
+        const pauseBtn = document.getElementById('pauseBtn');
+        if (pauseBtn) {
+            pauseBtn.textContent = this.gameActive ? '⏸ Pausa' : '▶ Continuar';
         }
     }
 
@@ -381,52 +252,40 @@ class PenaltyVRGame {
         this.countdownActive = true;
         this.countdownValue = 3;
 
-        if (this.renderer.xr.isPresenting) {
-            this.countdownMesh.visible = true;
-            this.countdownElement.textContent = this.countdownValue; // Update hidden HTML for texture
-            this.countdownUpdateTexture(); // Update 3D texture
-        } else {
-            if (!this.countdownElement || !this.countdownElement.style) {
-                console.error('Elemento countdown no disponible, continuando sin UI');
-                this.executePenalty();
-                return;
-            }
-            this.countdownElement.style.display = 'block';
-            this.countdownElement.textContent = this.countdownValue;
+        // Verificación robusta del elemento countdown
+        if (!this.countdownElement || !this.countdownElement.style) {
+            console.error('Elemento countdown no disponible, continuando sin UI');
+            this.executePenalty();
+            return;
         }
+
+        this.countdownElement.style.display = 'block';
+        this.countdownElement.textContent = this.countdownValue;
 
         this.updateCountdown();
     }
 
     updateCountdown() {
+        if (!this.countdownElement) {
+            console.error('CountdownElement no disponible');
+            this.countdownActive = false;
+            this.executePenalty();
+            return;
+        }
+
         if (this.countdownValue > 0) {
-            if (this.renderer.xr.isPresenting) {
-                this.countdownElement.textContent = this.countdownValue;
-                this.countdownUpdateTexture();
-            } else {
-                this.countdownElement.textContent = this.countdownValue;
-            }
+            this.countdownElement.textContent = this.countdownValue;
             this.countdownValue--;
             setTimeout(() => this.updateCountdown(), 1000);
         } else {
-            if (this.renderer.xr.isPresenting) {
-                this.countdownElement.textContent = '¡YA!';
-                this.countdownUpdateTexture();
-                setTimeout(() => {
-                    this.countdownMesh.visible = false;
-                    this.countdownActive = false;
-                    this.executePenalty();
-                }, 500);
-            } else {
+            this.countdownElement.textContent = '¡YA!';
+            setTimeout(() => {
                 if (this.countdownElement) {
-                    this.countdownElement.textContent = '¡YA!';
-                    setTimeout(() => {
-                        this.countdownElement.style.display = 'none';
-                        this.countdownActive = false;
-                        this.executePenalty();
-                    }, 500);
+                    this.countdownElement.style.display = 'none';
                 }
-            }
+                this.countdownActive = false;
+                this.executePenalty();
+            }, 500);
         }
     }
 
@@ -483,12 +342,14 @@ class PenaltyVRGame {
     createStadium() {
         const groundGeometry = new THREE.PlaneGeometry(100, 100);
 
-        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 });
+        // Crear material básico sin texturas para evitar errores de carga
+        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 }); // Verde césped
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         this.scene.add(ground);
 
+        // Intentar cargar textura de forma opcional
         const textureLoader = new THREE.TextureLoader();
         textureLoader.load('./map/piso.jpg',
             (texture) => {
@@ -578,11 +439,13 @@ class PenaltyVRGame {
                 fbx.position.set(0, 0, 8);
                 fbx.rotation.y = Math.PI;
 
+                // Limpiar materiales problemáticos
                 fbx.traverse(function (child) {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
 
+                        // Simplificar material si hay problemas
                         if (child.material && child.material.map) {
                             const simpleMaterial = new THREE.MeshLambertMaterial({
                                 map: child.material.map
@@ -606,10 +469,12 @@ class PenaltyVRGame {
         );
     }
 
+    // MÉTODO AÑADIDO: setupAnimation
     setupAnimation(fbx) {
         if (fbx.animations && fbx.animations.length > 0) {
             this.mixer = new THREE.AnimationMixer(fbx);
 
+            // Buscar animación de patada o usar la primera disponible
             const kickAnimation = fbx.animations.find(anim =>
                 anim.name.toLowerCase().includes('kick') ||
                 anim.name.toLowerCase().includes('shoot') ||
@@ -628,6 +493,7 @@ class PenaltyVRGame {
         }
     }
 
+    // Método para crear un shooter predeterminado si el FBX falla
     createDefaultShooter() {
         const shooterGroup = new THREE.Group();
 
@@ -665,7 +531,6 @@ class PenaltyVRGame {
 
         const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
         rightLeg.position.set(0.2, 0.5, 0);
-        rightLeg.position.set(0.2, 0.5, 0);
         shooterGroup.add(rightLeg);
 
         shooterGroup.position.set(0, 0, 8);
@@ -695,6 +560,7 @@ class PenaltyVRGame {
         this.ballVelocity.set(0, 0, 0);
         this.ballInPlay = false;
 
+        // Reiniciar la animación del shooter (si existe) a su estado inicial
         if (this.kickAction) {
             this.kickAction.stop();
         }
@@ -765,83 +631,25 @@ class PenaltyVRGame {
 
     updateControllerPositions() {
         this.controllers.forEach((controller, index) => {
-            if (this.renderer.xr.isPresenting) {
+            if (controller.userData.isSelecting) {
                 const hand = index === 0 ? this.hands.left : this.hands.right;
                 if (hand) {
-                    // Get controller's world position
-                    controller.getWorldPosition(hand.position);
+                    hand.position.copy(controller.position);
                     hand.visible = true;
                 }
             }
         });
 
-        // If not in VR, control hands with keyboard for desktop mode
         if (!this.renderer.xr.isPresenting) {
             this.hands.left.position.set(-0.5 + this.camera.position.x, 1.5 + this.camera.position.y, -1 + this.camera.position.z + 9);
             this.hands.right.position.set(0.5 + this.camera.position.x, 1.5 + this.camera.position.y, -1 + this.camera.position.z + 9);
             this.hands.left.visible = true;
             this.hands.right.visible = true;
-        } else {
-            // Hide hands if not in VR and controllers are not active (e.g. at game start)
-            this.hands.left.visible = false;
-            this.hands.right.visible = false;
         }
     }
 
     onControllerSelect(index) {
         this.controllers[index].userData.isSelecting = true;
-        // Check for specific button presses for UI interaction
-        if (this.renderer.xr.isPresenting) {
-            const gamepad = this.controllers[index].gamepad;
-            if (gamepad) {
-                // The 'B' button on the right Quest 3 controller is typically gamepad button index 4.
-                // The 'A' button is index 0. The 'X' button is index 2. The 'Y' button is index 3.
-                // Trigger is 0, Squeeze is 1.
-                // You might need to experiment with button indices.
-                // A common mapping for the 'B' button (right controller) is button 4.
-                if (index === 1 && gamepad.buttons[4] && gamepad.buttons[4].pressed) { // Check for 'B' button
-                    this.toggleVRMenu();
-                }
-
-                // If you want to use the raycaster to select menu items:
-                // If the menu is visible, cast a ray from the controller and check for intersections
-                // with the 3D UI planes.
-                if (this.vrMenuVisible) {
-                    const tempMatrix = new THREE.Matrix4();
-                    tempMatrix.identity().extractRotation(this.controllers[index].matrixWorld);
-                    const raycaster = new THREE.Raycaster();
-                    raycaster.ray.origin.setFromMatrixPosition(this.controllers[index].matrixWorld);
-                    raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix); // Pointing forward from controller
-
-                    const intersects = raycaster.intersectObjects([this.vrMenuMesh]);
-
-                    if (intersects.length > 0) {
-                        const intersection = intersects[0];
-                        // Calculate UV coordinates on the plane to determine where the click happened
-                        const uv = intersection.uv;
-
-                        // Map UV coordinates to the internal HTML element's bounding box
-                        // This is a simplified example. A full implementation would involve
-                        // parsing the HTML layout and creating clickable regions.
-                        // For now, we'll map a general area.
-
-                        // Example: Simple logic for "Start Round" button within the menu mesh
-                        // Assuming menu buttons are stacked vertically
-                        // This would need to be very precise based on the actual HTML layout.
-                        if (uv.y > 0.6 && uv.y < 0.9) { // Top part of the menu (e.g., Start Round button area)
-                             // This is a hacky way to trigger. Better is to map specific button areas.
-                             // For now, assume it always triggers startPenalty
-                            // document.getElementById('startRoundBtn').click(); // This might not work directly with canvas texture
-                             this.startPenalty(); // Call the game method directly
-                        } else if (uv.y > 0.3 && uv.y < 0.6) { // Middle part (e.g., Pause button)
-                            this.togglePause();
-                        } else if (uv.y > 0.0 && uv.y < 0.3) { // Bottom part (e.g., Restart button)
-                            this.restart();
-                        }
-                    }
-                }
-            }
-        }
     }
 
     onControllerRelease(index) {
@@ -872,19 +680,6 @@ class PenaltyVRGame {
         if (goalkeeperScoreEl) goalkeeperScoreEl.textContent = this.goalkeeperScore;
         if (shooterScoreEl) shooterScoreEl.textContent = this.shooterScore;
         if (roundEl) roundEl.textContent = this.round;
-
-        // Update 3D score display
-        if (this.renderer.xr.isPresenting && this.scoreDisplayMesh) {
-            const scoreHtml = `
-                Portero: <span style="color: yellow">${this.goalkeeperScore}</span> | Rival: <span style="color: orange">${this.shooterScore}</span> | Ronda: <span style="color: lightblue">${this.round}</span>
-            `;
-            // Temporarily set the hidden HTML element's innerHTML
-            const scoreDisplayElement = document.getElementById('score-display');
-            if (scoreDisplayElement) {
-                scoreDisplayElement.innerHTML = scoreHtml;
-                this.scoreDisplayUpdateTexture(); // Force update the 3D texture
-            }
-        }
     }
 
     endGame() {
@@ -893,33 +688,19 @@ class PenaltyVRGame {
         const gameResult = document.getElementById('gameResult');
         const finalScore = document.getElementById('finalScore');
 
-        let resultText = '';
-        let resultColor = '';
-
-        if (this.goalkeeperScore >= this.maxScore) {
-            resultText = '¡Felicidades! ¡Ganaste!';
-            resultColor = '#00ff00';
-        } else {
-            resultText = '¡Perdiste! Inténtalo de nuevo';
-            resultColor = '#ff0000';
-        }
-
-        const finalScoreText = `Puntuación Final - Portero: ${this.goalkeeperScore} | Rival: ${this.shooterScore}`;
-
         if (gameOverDiv && gameResult && finalScore) {
-            gameResult.textContent = resultText;
-            gameResult.style.color = resultColor;
-            finalScore.textContent = finalScoreText;
-
-            if (this.renderer.xr.isPresenting) {
-                this.gameOverMesh.visible = true;
-                // Update the hidden HTML element content for the 3D texture
-                gameOverDiv.style.display = 'block'; // Make sure the HTML is rendered for html2canvas
-                this.gameOverUpdateTexture();
+            if (this.goalkeeperScore >= this.maxScore) {
+                gameResult.textContent = '¡Felicidades! ¡Ganaste!';
+                gameResult.style.color = '#00ff00';
             } else {
-                gameOverDiv.style.display = 'block';
+                gameResult.textContent = '¡Perdiste! Inténtalo de nuevo';
+                gameResult.style.color = '#ff0000';
             }
+
+            finalScore.textContent = `Puntuación Final - Portero: ${this.goalkeeperScore} | Rival: ${this.shooterScore}`;
+            gameOverDiv.style.display = 'block';
         } else {
+            // Crear elementos de fin de juego dinámicamente si no existen
             alert(`Juego terminado! Portero: ${this.goalkeeperScore} | Rival: ${this.shooterScore}`);
         }
     }
@@ -933,10 +714,7 @@ class PenaltyVRGame {
 
         const gameOverDiv = document.getElementById('gameOver');
         if (gameOverDiv) {
-            if (this.renderer.xr.isPresenting) {
-                this.gameOverMesh.visible = false;
-            }
-            gameOverDiv.style.display = 'none'; // Hide HTML element for 2D mode
+            gameOverDiv.style.display = 'none';
         }
 
         this.updateUI();
@@ -944,6 +722,8 @@ class PenaltyVRGame {
 
         setTimeout(() => this.startPenalty(), 2000);
     }
+
+
 
     setupEventListeners() {
         window.addEventListener('resize', () => this.onWindowResize());
@@ -984,15 +764,6 @@ class PenaltyVRGame {
                         this.hands.right.position.y -= moveAmount;
                         this.hands.left.position.y -= moveAmount;
                         break;
-                    case 'KeyP': // Toggle pause with 'P' in desktop
-                        this.togglePause();
-                        break;
-                    case 'KeyR': // Restart with 'R' in desktop
-                        this.restart();
-                        break;
-                    case 'Space': // Start round with 'Space' in desktop
-                        this.startPenalty();
-                        break;
                 }
                 const maxX = 4;
                 const maxY = 2.5;
@@ -1000,18 +771,6 @@ class PenaltyVRGame {
                 this.hands.left.position.y = THREE.MathUtils.clamp(this.hands.left.position.y, 0.5, maxY);
                 this.hands.right.position.x = THREE.MathUtils.clamp(this.hands.right.position.x, -maxX, maxX);
                 this.hands.right.position.y = THREE.MathUtils.clamp(this.hands.right.position.y, 0.5, maxY);
-            }
-        });
-
-        // Add a specific listener for the B button on the right controller
-        // WebXR controller input is usually handled via the `gamepad` object.
-        // We will check for the button state in the `animate` loop.
-        this.controllers.forEach((controller, index) => {
-            if (index === 1) { // Right controller (index 1)
-                controller.addEventListener('connected', (event) => {
-                    // Check button mapping when controller connects
-                    console.log('Right controller connected:', event.data.gamepad);
-                });
             }
         });
     }
@@ -1038,55 +797,11 @@ class PenaltyVRGame {
         }
 
         this.updateControllerPositions();
-
-        // Check for 'B' button press on the right controller (index 1)
-        if (this.renderer.xr.isPresenting) {
-            const rightController = this.controllers[1];
-            if (rightController && rightController.gamepad) {
-                // Button 4 is commonly the 'B' button on Meta Quest controllers
-                // You might need to verify this or check all buttons.
-                // Let's use a flag to prevent multiple triggers on hold
-                if (rightController.gamepad.buttons[4] && rightController.gamepad.buttons[4].pressed && !rightController.userData.bButtonPressed) {
-                    this.toggleVRMenu();
-                    rightController.userData.bButtonPressed = true;
-                }
-                if (rightController.gamepad.buttons[4] && !rightController.gamepad.buttons[4].pressed) {
-                    rightController.userData.bButtonPressed = false;
-                }
-
-                // If menu is visible, detect interactions with the 3D UI
-                if (this.vrMenuVisible) {
-                    const tempMatrix = new THREE.Matrix4();
-                    tempMatrix.identity().extractRotation(rightController.matrixWorld);
-                    const raycaster = new THREE.Raycaster();
-                    raycaster.ray.origin.setFromMatrixPosition(rightController.matrixWorld);
-                    raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix); // Pointing forward from controller
-
-                    const intersects = raycaster.intersectObjects([this.vrMenuMesh], true); // Recursive check for children
-
-                    if (intersects.length > 0) {
-                        const intersection = intersects[0];
-                        // You'd ideally have separate 3D meshes for each button
-                        // For `html2canvas` rendered UI, you'd calculate UV coordinates
-                        // and map them to the button regions of your HTML.
-                        // This is a complex topic for pure Three.js without a UI library.
-                        // As a workaround, we'll listen for the 'select' event on the controller.
-                        // For a better implementation, consider three-mesh-ui.
-
-                        // Visual feedback for hovering over the menu:
-                        this.vrMenuMesh.material.color.setHex(0xaaaaaa); // Lighten when hovered
-                    } else {
-                        this.vrMenuMesh.material.color.setHex(0xffffff); // Reset color
-                    }
-                }
-            }
-        }
-
         this.renderer.render(this.scene, this.camera);
     }
 }
 
-// Global function for restart button (if you keep the HTML button for desktop)
+// Global function for restart button
 window.restartGame = function () {
     if (window.game) {
         window.game.restart();
@@ -1094,9 +809,7 @@ window.restartGame = function () {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // You MUST include html2canvas library in your HTML before this script.
-    // <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-
+    // Esperar un poco más para asegurar que todo esté listo
     setTimeout(() => {
         window.game = new PenaltyVRGame();
     }, 100);

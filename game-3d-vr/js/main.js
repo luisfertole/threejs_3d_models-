@@ -79,8 +79,8 @@ class PenaltyVRGame {
             0.1,
             1000
         );
-        this.camera.position.set(0, 1.6, -8);
-        this.camera.lookAt(new THREE.Vector3(0, 1.6, 8));
+        this.camera.position.set(0, 1.6, -10);
+        this.camera.lookAt(new THREE.Vector3(0, 1.6, 0));
         this.scene.add(this.camera);
     }
 
@@ -151,7 +151,7 @@ class PenaltyVRGame {
     setupQuest3Controls() {
         // Sistema mejorado de detección de botones
         console.log('Configurando controles Quest 3...');
-        
+
         // Crear un loop para detectar el estado de los botones en cada frame
         this.controllerUpdateLoop = () => {
             if (!this.renderer.xr.isPresenting) return;
@@ -164,23 +164,23 @@ class PenaltyVRGame {
                 if (!frame) return;
 
                 const inputSources = session.inputSources;
-                
+
                 for (let i = 0; i < inputSources.length; i++) {
                     const inputSource = inputSources[i];
                     if (!inputSource.gamepad) continue;
 
                     const handedness = inputSource.handedness; // 'left' o 'right'
                     const gamepad = inputSource.gamepad;
-                    
+
                     // Guardar estado anterior
                     const buttonState = this.buttonStates[handedness];
                     buttonState.prevButtons = [...buttonState.buttons];
-                    
+
                     // Actualizar estado actual
                     for (let j = 0; j < gamepad.buttons.length; j++) {
                         buttonState.buttons[j] = gamepad.buttons[j].pressed;
                     }
-                    
+
                     // Detectar presionado (transición de false a true)
                     for (let j = 0; j < gamepad.buttons.length; j++) {
                         if (buttonState.buttons[j] && !buttonState.prevButtons[j]) {
@@ -194,7 +194,7 @@ class PenaltyVRGame {
 
     handleButtonPress(handedness, buttonIndex) {
         const currentTime = this.clock.getElapsedTime();
-        
+
         console.log(`Botón presionado: ${handedness} - Índice: ${buttonIndex}`);
 
         // Mapeo de botones Quest 3:
@@ -262,31 +262,31 @@ class PenaltyVRGame {
         const context = canvas.getContext('2d');
         canvas.width = 512;
         canvas.height = 128;
-        
+
         context.fillStyle = 'rgba(0, 0, 0, 0.8)';
         context.fillRect(0, 0, canvas.width, canvas.height);
-        
+
         context.fillStyle = 'white';
         context.font = 'bold 48px Arial';
         context.textAlign = 'center';
         context.fillText(message, canvas.width / 2, canvas.height / 2 + 16);
-        
+
         const texture = new THREE.CanvasTexture(canvas);
-        const material = new THREE.MeshBasicMaterial({ 
-            map: texture, 
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
             transparent: true,
             opacity: 0.9
         });
-        
+
         const geometry = new THREE.PlaneGeometry(2, 0.5);
         const mesh = new THREE.Mesh(geometry, material);
-        
+
         // Posicionar el texto frente al jugador
         mesh.position.set(0, 2.5, -2);
         mesh.lookAt(this.camera.position);
-        
+
         this.scene.add(mesh);
-        
+
         // Remover después de 2 segundos
         setTimeout(() => {
             this.scene.remove(mesh);
@@ -346,7 +346,7 @@ class PenaltyVRGame {
             console.log('No se puede iniciar penal: gameActive=', this.gameActive, 'ballInPlay=', this.ballInPlay, 'isPaused=', this.isPaused);
             return;
         }
-        
+
         console.log('Iniciando penal...');
         this.executePenalty();
     }
@@ -423,21 +423,22 @@ class PenaltyVRGame {
         directionalLight.shadow.camera.bottom = -50;
         this.scene.add(directionalLight);
     }
-
     createStadium() {
-        const groundGeometry = new THREE.PlaneGeometry(100, 100);
+        // SUELO CON TEXTURA
+        const groundGeometry = new THREE.PlaneGeometry(30, 20); // Área más pequeña y cerrada
         const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 });
         const ground = new THREE.Mesh(groundGeometry, groundMaterial);
         ground.rotation.x = -Math.PI / 2;
         ground.receiveShadow = true;
         this.scene.add(ground);
 
+        // Cargar textura del suelo
         const textureLoader = new THREE.TextureLoader();
         textureLoader.load('./map/piso.jpg',
             (texture) => {
                 texture.wrapS = THREE.RepeatWrapping;
                 texture.wrapT = THREE.RepeatWrapping;
-                texture.repeat.set(10, 10);
+                texture.repeat.set(6, 4); // Ajustar repetición para el área más pequeña
                 ground.material.map = texture;
                 ground.material.needsUpdate = true;
             },
@@ -447,23 +448,95 @@ class PenaltyVRGame {
             }
         );
 
-        const wallHeight = 10;
-        const wallGeometry = new THREE.BoxGeometry(100, wallHeight, 1);
+        // CONFIGURACIÓN DE LAS 4 PAREDES
+        const wallHeight = 8;
+        const wallThickness = 0.5;
+
+        // Crear material para las paredes con textura
         const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 });
 
-        const backWall = new THREE.Mesh(wallGeometry, wallMaterial);
-        backWall.position.set(0, wallHeight / 2, -50);
+        // Cargar textura para las paredes (puedes usar la misma o una diferente)
+        textureLoader.load('./map/gradas.jpg', // Asegúrate de tener esta textura
+            (wallTexture) => {
+                wallTexture.wrapS = THREE.RepeatWrapping;
+                wallTexture.wrapT = THREE.RepeatWrapping;
+                wallTexture.repeat.set(4, 2);
+
+                // Aplicar textura a todas las paredes
+                this.stadium.walls.forEach(wall => {
+                    wall.material.map = wallTexture;
+                    wall.material.needsUpdate = true;
+                });
+            },
+            undefined,
+            (error) => {
+                console.warn('No se pudo cargar la textura de las paredes, usando color sólido');
+            }
+        );
+
+        // Crear grupo para organizar las paredes
+        this.stadium = { walls: [] };
+
+        // PARED TRASERA (detrás de la portería)
+        const backWallGeometry = new THREE.BoxGeometry(30, wallHeight, wallThickness);
+        const backWall = new THREE.Mesh(backWallGeometry, wallMaterial.clone());
+        backWall.position.set(0, wallHeight / 2, -12.5); // Justo detrás de la portería
+        backWall.castShadow = true;
+        backWall.receiveShadow = true;
         this.scene.add(backWall);
+        this.stadium.walls.push(backWall);
 
-        const sideWallGeometry = new THREE.BoxGeometry(1, wallHeight, 100);
-        const leftWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
-        leftWall.position.set(-50, wallHeight / 2, 0);
+        // PARED FRONTAL (detrás del jugador que tira)
+        const frontWallGeometry = new THREE.BoxGeometry(30, wallHeight, wallThickness);
+        const frontWall = new THREE.Mesh(frontWallGeometry, wallMaterial.clone());
+        frontWall.position.set(0, wallHeight / 2, 10); // Detrás del jugador
+        frontWall.castShadow = true;
+        frontWall.receiveShadow = true;
+        this.scene.add(frontWall);
+        this.stadium.walls.push(frontWall);
+
+        // PARED IZQUIERDA
+        const leftWallGeometry = new THREE.BoxGeometry(wallThickness, wallHeight, 22.5);
+        const leftWall = new THREE.Mesh(leftWallGeometry, wallMaterial.clone());
+        leftWall.position.set(-15, wallHeight / 2, -1.25); // Centro entre las paredes frontal y trasera
+        leftWall.castShadow = true;
+        leftWall.receiveShadow = true;
         this.scene.add(leftWall);
+        this.stadium.walls.push(leftWall);
 
-        const rightWall = new THREE.Mesh(sideWallGeometry, wallMaterial);
-        rightWall.position.set(50, wallHeight / 2, 0);
+        // PARED DERECHA
+        const rightWallGeometry = new THREE.BoxGeometry(wallThickness, wallHeight, 22.5);
+        const rightWall = new THREE.Mesh(rightWallGeometry, wallMaterial.clone());
+        rightWall.position.set(15, wallHeight / 2, -1.25); // Centro entre las paredes frontal y trasera
+        rightWall.castShadow = true;
+        rightWall.receiveShadow = true;
         this.scene.add(rightWall);
+        this.stadium.walls.push(rightWall);
+
+        // OPCIONAL: Agregar esquinas para mejor apariencia
+        this.createCornerPosts(wallHeight);
     }
+
+    createCornerPosts(wallHeight) {
+        const postGeometry = new THREE.CylinderGeometry(0.2, 0.2, wallHeight);
+        const postMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+
+        const corners = [
+            { x: -15, z: -12.5 }, // Esquina trasera izquierda
+            { x: 15, z: -12.5 },  // Esquina trasera derecha
+            { x: -15, z: 10 },    // Esquina frontal izquierda
+            { x: 15, z: 10 }      // Esquina frontal derecha
+        ];
+
+        corners.forEach(corner => {
+            const post = new THREE.Mesh(postGeometry, postMaterial);
+            post.position.set(corner.x, wallHeight / 2, corner.z);
+            post.castShadow = true;
+            post.receiveShadow = true;
+            this.scene.add(post);
+        });
+    }
+
 
     createGoal() {
         const goalGroup = new THREE.Group();
@@ -701,23 +774,32 @@ class PenaltyVRGame {
     }
 
     updateControllerPositions() {
-        this.controllers.forEach((controller, index) => {
-            if (controller.userData.isSelecting) {
-                const hand = index === 0 ? this.hands.left : this.hands.right;
-                if (hand) {
-                    hand.position.copy(controller.position);
-                    hand.visible = true;
-                }
+    this.controllers.forEach((controller, index) => {
+        if (controller.userData.isSelecting) {
+            const hand = index === 0 ? this.hands.left : this.hands.right;
+            if (hand) {
+                hand.position.copy(controller.position);
+                hand.visible = true;
             }
-        });
-
-        if (!this.renderer.xr.isPresenting) {
-            this.hands.left.position.set(-0.5 + this.camera.position.x, 1.5 + this.camera.position.y, -1 + this.camera.position.z + 9);
-            this.hands.right.position.set(0.5 + this.camera.position.x, 1.5 + this.camera.position.y, -1 + this.camera.position.z + 9);
-            this.hands.left.visible = true;
-            this.hands.right.visible = true;
         }
+    });
+
+    if (!this.renderer.xr.isPresenting) {
+        // Ajustar posición de las manos para la nueva posición de cámara
+        this.hands.left.position.set(
+            -0.5 + this.camera.position.x, 
+            1.5 + this.camera.position.y, 
+            -1 + this.camera.position.z + 11 // Ajustado para nueva posición de cámara
+        );
+        this.hands.right.position.set(
+            0.5 + this.camera.position.x, 
+            1.5 + this.camera.position.y, 
+            -1 + this.camera.position.z + 11 // Ajustado para nueva posición de cámara
+        );
+        this.hands.left.visible = true;
+        this.hands.right.visible = true;
     }
+}
 
     onControllerSelect(index) {
         this.controllers[index].userData.isSelecting = true;
@@ -789,73 +871,79 @@ class PenaltyVRGame {
 
         this.updateUI();
         this.resetBallPosition();
-        
+
         // Resetear cooldowns
         this.buttonCooldowns.penalty = 0;
         this.buttonCooldowns.pause = 0;
         this.buttonCooldowns.restart = 0;
-        
+
         console.log('Juego reiniciado');
     }
 
     setupEventListeners() {
-        window.addEventListener('resize', () => this.onWindowResize());
+    window.addEventListener('resize', () => this.onWindowResize());
 
-        document.addEventListener('keydown', (event) => {
-            if (!this.renderer.xr.isPresenting) {
-                const moveAmount = 0.5;
-                switch (event.code) {
-                    case 'KeyA':
-                        this.hands.left.position.x -= moveAmount;
-                        this.hands.right.position.x -= moveAmount;
-                        break;
-                    case 'KeyD':
-                        this.hands.left.position.x += moveAmount;
-                        this.hands.right.position.x += moveAmount;
-                        break;
-                    case 'KeyW':
-                        this.hands.left.position.y += moveAmount;
-                        this.hands.right.position.y += moveAmount;
-                        break;
-                    case 'KeyS':
-                        this.hands.left.position.y -= moveAmount;
-                        this.hands.right.position.y -= moveAmount;
-                        break;
-                    case 'ArrowLeft':
-                        this.hands.right.position.x -= moveAmount;
-                        this.hands.left.position.x -= moveAmount;
-                        break;
-                    case 'ArrowRight':
-                        this.hands.right.position.x += moveAmount;
-                        this.hands.left.position.x += moveAmount;
-                        break;
-                    case 'ArrowUp':
-                        this.hands.right.position.y += moveAmount;
-                        this.hands.left.position.y += moveAmount;
-                        break;
-                    case 'ArrowDown':
-                        this.hands.right.position.y -= moveAmount;
-                        this.hands.left.position.y -= moveAmount;
-                        break;
-                    case 'Space': // Barra espaciadora para iniciar penal
-                        this.startPenalty();
-                        break;
-                    case 'KeyP': // Tecla P para pausa
-                        this.togglePause();
-                        break;
-                    case 'KeyR': // Tecla R para reiniciar
-                        this.restart();
-                        break;
-                }
-                const maxX = 4;
-                const maxY = 2.5;
-                this.hands.left.position.x = THREE.MathUtils.clamp(this.hands.left.position.x, -maxX, maxX);
-                this.hands.left.position.y = THREE.MathUtils.clamp(this.hands.left.position.y, 0.5, maxY);
-                this.hands.right.position.x = THREE.MathUtils.clamp(this.hands.right.position.x, -maxX, maxX);
-                this.hands.right.position.y = THREE.MathUtils.clamp(this.hands.right.position.y, 0.5, maxY);
+    document.addEventListener('keydown', (event) => {
+        if (!this.renderer.xr.isPresenting) {
+            const moveAmount = 0.5;
+            switch (event.code) {
+                case 'KeyA':
+                    this.hands.left.position.x -= moveAmount;
+                    this.hands.right.position.x -= moveAmount;
+                    break;
+                case 'KeyD':
+                    this.hands.left.position.x += moveAmount;
+                    this.hands.right.position.x += moveAmount;
+                    break;
+                case 'KeyW':
+                    this.hands.left.position.y += moveAmount;
+                    this.hands.right.position.y += moveAmount;
+                    break;
+                case 'KeyS':
+                    this.hands.left.position.y -= moveAmount;
+                    this.hands.right.position.y -= moveAmount;
+                    break;
+                case 'ArrowLeft':
+                    this.hands.right.position.x -= moveAmount;
+                    this.hands.left.position.x -= moveAmount;
+                    break;
+                case 'ArrowRight':
+                    this.hands.right.position.x += moveAmount;
+                    this.hands.left.position.x += moveAmount;
+                    break;
+                case 'ArrowUp':
+                    this.hands.right.position.y += moveAmount;
+                    this.hands.left.position.y += moveAmount;
+                    break;
+                case 'ArrowDown':
+                    this.hands.right.position.y -= moveAmount;
+                    this.hands.left.position.y -= moveAmount;
+                    break;
+                case 'Space':
+                    this.startPenalty();
+                    break;
+                case 'KeyP':
+                    this.togglePause();
+                    break;
+                case 'KeyR':
+                    this.restart();
+                    break;
             }
-        });
-    }
+            
+            // Nuevos límites para el área cerrada (más pequeña)
+            const maxX = 3.5; // Reducido porque el área es más pequeña
+            const maxY = 2.5;
+            const minX = -3.5;
+            const minY = 0.5;
+            
+            // Aplicar límites a ambas manos
+            [this.hands.left, this.hands.right].forEach(hand => {
+                hand.position.x = THREE.MathUtils.clamp(hand.position.x, minX, maxX);
+                hand.position.y = THREE.MathUtils.clamp(hand.position.y, minY, maxY);
+            });
+        }
+    });
+}
 
     onWindowResize() {
         this.camera.aspect = window.innerWidth / window.innerHeight;

@@ -410,8 +410,8 @@ class PenaltyVRGame {
         const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
         this.scene.add(ambientLight);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-        directionalLight.position.set(50, 100, 50);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        directionalLight.position.set(0, 100, 0);
         directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.width = 2048;
         directionalLight.shadow.mapSize.height = 2048;
@@ -423,119 +423,105 @@ class PenaltyVRGame {
         directionalLight.shadow.camera.bottom = -50;
         this.scene.add(directionalLight);
     }
+    
     createStadium() {
-        // SUELO CON TEXTURA
-        const groundGeometry = new THREE.PlaneGeometry(30, 20); // Área más pequeña y cerrada
-        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x4CAF50 });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        ground.receiveShadow = true;
-        this.scene.add(ground);
+    // SUELO CON TEXTURA ÚNICA
+    const groundGeometry = new THREE.PlaneGeometry(30, 20);
+    const groundTexture = new THREE.TextureLoader().load('./map/piso.jpg', texture => {
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.repeat.set(1, 1); // Sin repetición
+    });
+    
+    const groundMaterial = new THREE.MeshLambertMaterial({ 
+        map: groundTexture,
+        color: 0x4CAF50 
+    });
+    
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    this.scene.add(ground);
 
-        // Cargar textura del suelo
-        const textureLoader = new THREE.TextureLoader();
-        textureLoader.load('./map/piso.jpg',
-            (texture) => {
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.repeat.set(6, 4); // Ajustar repetición para el área más pequeña
-                ground.material.map = texture;
-                ground.material.needsUpdate = true;
-            },
-            undefined,
-            (error) => {
-                console.warn('No se pudo cargar la textura del piso, usando color sólido');
-            }
-        );
+    // PAREDES CON TEXTURA ÚNICA
+    const wallHeight = 8;
+    const wallThickness = 0.5;
+    const wallTexture = new THREE.TextureLoader().load('./map/gradas.jpg', texture => {
+        texture.wrapS = THREE.ClampToEdgeWrapping;
+        texture.wrapT = THREE.ClampToEdgeWrapping;
+        texture.repeat.set(1, 1); // Textura no repetida
+    });
 
-        // CONFIGURACIÓN DE LAS 4 PAREDES
-        const wallHeight = 8;
-        const wallThickness = 0.5;
+    const wallMaterial = new THREE.MeshLambertMaterial({
+        map: wallTexture,
+        color: 0x888888,
+        side: THREE.DoubleSide // Para ver la textura desde ambos lados
+    });
 
-        // Crear material para las paredes con textura
-        const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    // Crear grupo para organizar las paredes
+    this.stadium = { walls: [] };
 
-        // Cargar textura para las paredes (puedes usar la misma o una diferente)
-        textureLoader.load('./map/gradas.jpg', // Asegúrate de tener esta textura
-            (wallTexture) => {
-                wallTexture.wrapS = THREE.RepeatWrapping;
-                wallTexture.wrapT = THREE.RepeatWrapping;
-                wallTexture.repeat.set(4, 2);
+    // PARED TRASERA (textura completa)
+    const backWallGeometry = new THREE.BoxGeometry(30, wallHeight, wallThickness);
+    const backWall = new THREE.Mesh(backWallGeometry, wallMaterial.clone());
+    backWall.position.set(0, wallHeight/2, -12.5);
+    backWall.castShadow = true;
+    backWall.receiveShadow = true;
+    this.scene.add(backWall);
+    this.stadium.walls.push(backWall);
 
-                // Aplicar textura a todas las paredes
-                this.stadium.walls.forEach(wall => {
-                    wall.material.map = wallTexture;
-                    wall.material.needsUpdate = true;
-                });
-            },
-            undefined,
-            (error) => {
-                console.warn('No se pudo cargar la textura de las paredes, usando color sólido');
-            }
-        );
+    // PARED FRONTAL (textura completa)
+    const frontWallGeometry = new THREE.BoxGeometry(30, wallHeight, wallThickness);
+    const frontWall = new THREE.Mesh(frontWallGeometry, wallMaterial.clone());
+    frontWall.position.set(0, wallHeight/2, 10);
+    frontWall.castShadow = true;
+    frontWall.receiveShadow = true;
+    this.scene.add(frontWall);
+    this.stadium.walls.push(frontWall);
 
-        // Crear grupo para organizar las paredes
-        this.stadium = { walls: [] };
+    // PARED IZQUIERDA (textura completa)
+    const leftWallGeometry = new THREE.BoxGeometry(wallThickness, wallHeight, 22.5);
+    const leftWall = new THREE.Mesh(leftWallGeometry, wallMaterial.clone());
+    leftWall.position.set(-15, wallHeight/2, -1.25);
+    leftWall.castShadow = true;
+    leftWall.receiveShadow = true;
+    this.scene.add(leftWall);
+    this.stadium.walls.push(leftWall);
 
-        // PARED TRASERA (detrás de la portería)
-        const backWallGeometry = new THREE.BoxGeometry(30, wallHeight, wallThickness);
-        const backWall = new THREE.Mesh(backWallGeometry, wallMaterial.clone());
-        backWall.position.set(0, wallHeight / 2, -12.5); // Justo detrás de la portería
-        backWall.castShadow = true;
-        backWall.receiveShadow = true;
-        this.scene.add(backWall);
-        this.stadium.walls.push(backWall);
+    // PARED DERECHA (textura completa)
+    const rightWallGeometry = new THREE.BoxGeometry(wallThickness, wallHeight, 22.5);
+    const rightWall = new THREE.Mesh(rightWallGeometry, wallMaterial.clone());
+    rightWall.position.set(15, wallHeight/2, -1.25);
+    rightWall.castShadow = true;
+    rightWall.receiveShadow = true;
+    this.scene.add(rightWall);
+    this.stadium.walls.push(rightWall);
 
-        // PARED FRONTAL (detrás del jugador que tira)
-        const frontWallGeometry = new THREE.BoxGeometry(30, wallHeight, wallThickness);
-        const frontWall = new THREE.Mesh(frontWallGeometry, wallMaterial.clone());
-        frontWall.position.set(0, wallHeight / 2, 10); // Detrás del jugador
-        frontWall.castShadow = true;
-        frontWall.receiveShadow = true;
-        this.scene.add(frontWall);
-        this.stadium.walls.push(frontWall);
-
-        // PARED IZQUIERDA
-        const leftWallGeometry = new THREE.BoxGeometry(wallThickness, wallHeight, 22.5);
-        const leftWall = new THREE.Mesh(leftWallGeometry, wallMaterial.clone());
-        leftWall.position.set(-15, wallHeight / 2, -1.25); // Centro entre las paredes frontal y trasera
-        leftWall.castShadow = true;
-        leftWall.receiveShadow = true;
-        this.scene.add(leftWall);
-        this.stadium.walls.push(leftWall);
-
-        // PARED DERECHA
-        const rightWallGeometry = new THREE.BoxGeometry(wallThickness, wallHeight, 22.5);
-        const rightWall = new THREE.Mesh(rightWallGeometry, wallMaterial.clone());
-        rightWall.position.set(15, wallHeight / 2, -1.25); // Centro entre las paredes frontal y trasera
-        rightWall.castShadow = true;
-        rightWall.receiveShadow = true;
-        this.scene.add(rightWall);
-        this.stadium.walls.push(rightWall);
-
-        // OPCIONAL: Agregar esquinas para mejor apariencia
-        this.createCornerPosts(wallHeight);
-    }
+    // ESQUINAS SIN TEXTURA (para mantener el estilo limpio)
+    this.createCornerPosts(wallHeight);
+}
 
     createCornerPosts(wallHeight) {
-        const postGeometry = new THREE.CylinderGeometry(0.2, 0.2, wallHeight);
-        const postMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+    const postGeometry = new THREE.CylinderGeometry(0.2, 0.2, wallHeight);
+    const postMaterial = new THREE.MeshLambertMaterial({ 
+        color: 0x333333 // Color sólido oscuro para contraste
+    });
 
-        const corners = [
-            { x: -15, z: -12.5 }, // Esquina trasera izquierda
-            { x: 15, z: -12.5 },  // Esquina trasera derecha
-            { x: -15, z: 10 },    // Esquina frontal izquierda
-            { x: 15, z: 10 }      // Esquina frontal derecha
-        ];
+    const corners = [
+        { x: -15, z: -12.5 },
+        { x: 15, z: -12.5 },
+        { x: -15, z: 10 },
+        { x: 15, z: 10 }
+    ];
 
-        corners.forEach(corner => {
-            const post = new THREE.Mesh(postGeometry, postMaterial);
-            post.position.set(corner.x, wallHeight / 2, corner.z);
-            post.castShadow = true;
-            post.receiveShadow = true;
-            this.scene.add(post);
-        });
-    }
+    corners.forEach(corner => {
+        const post = new THREE.Mesh(postGeometry, postMaterial);
+        post.position.set(corner.x, wallHeight/2, corner.z);
+        post.castShadow = true;
+        post.receiveShadow = true;
+        this.scene.add(post);
+    });
+}
 
 
     createGoal() {
